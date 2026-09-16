@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="Waveshare AI Speaker Assistant. Local wake. Live voice. Light that listens.">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#071526"/><stop offset="1" stop-color="#152443"/></linearGradient><linearGradient id="ring"><stop stop-color="#36e4c5"/><stop offset="1" stop-color="#7989ff"/></linearGradient></defs>
+<rect width="1200" height="300" rx="24" fill="url(#bg)"/>
+<g font-family="Segoe UI,Arial,sans-serif"><text x="58" y="67" fill="#46ddc6" font-size="14" letter-spacing="4">A LITTLE SPEAKER. A REAL CONVERSATION.</text><text x="56" y="127" fill="#f4f7ff" font-size="44" font-weight="700">Waveshare AI</text><text x="56" y="178" fill="#f4f7ff" font-size="44" font-weight="700">Speaker Assistant</text><text x="58" y="236" fill="#acbcd5" font-size="19">Local wake. Live voice. Light that listens.</text></g>
+<circle cx="975" cy="150" r="91" stroke="#233f62" stroke-width="16" fill="#101e35"/><circle cx="975" cy="150" r="91" stroke="url(#ring)" stroke-width="12" fill="none" stroke-dasharray="69 13" transform="rotate(-90 975 150)"/>
+<g stroke="url(#ring)" stroke-width="9" stroke-linecap="round"><path d="M925 142v16M945 127v46M965 109v82M985 119v62M1005 133v34M1025 143v14"/></g></svg>

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "home-voice"
+version = "0.1.0"
+description = "Waveshare AI Speaker Assistant setup tools and optional desktop voice bridge"
+requires-python = ">=3.11"
+dependencies = ["websockets>=15,<18", "sounddevice>=0.5.3,<0.6", "pyserial==3.5"]
+
+[project.scripts]
+home-voice = "home_voice.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+home_voice = ["*.html"]

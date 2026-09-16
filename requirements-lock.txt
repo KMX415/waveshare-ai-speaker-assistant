@@ -1,0 +1,6 @@
+# Resolved and tested on Windows / Python 3.12.14, 2026-09-14.
+cffi==2.1.1
+pycparser==3.0
+pyserial==3.5
+sounddevice==0.5.6
+websockets==17.1

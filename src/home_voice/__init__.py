@@ -1,0 +1,1 @@
+"""Home voice assistant."""

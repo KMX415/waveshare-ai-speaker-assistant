@@ -1,0 +1,76 @@
+# Standalone runtime and diagnostics
+
+The board connects directly over Wi-Fi to OpenAI. The Python setup UI and original
+desktop bridge are optional tools, not runtime requirements. Start with the
+[first-time guide](getting-started.md) for installation.
+
+## Conversation lifecycle
+
+WakeNet detects Jarvis or Computer on echo-cancelled 16 kHz audio locally. Detection
+acknowledges with a flash and tone, then starts Wi-Fi/TLS setup. Wait for the
+session-ready tone before talking. BOOT can also start a session.
+
+“Goodbye, Jarvis” is matched only against input transcript fragments. The matcher
+ignores case/punctuation, accepts “good bye,” joins streamed fragments, waits 600 ms
+for the last word, and expires fragments after a three-second gap. Assistant output
+cannot trigger it. Quoting the command can. BOOT is the offline fallback.
+
+Closing waits for final session usage, then returns to local wake listening after a
+three-second cooldown. Limits are 60 seconds inactivity and 10 minutes total.
+Wi-Fi disconnects schedule a reconnect after five seconds; a failed voice session
+does not automatically open another paid session.
+
+## Audio and memory
+
+Capture/playback queues are bounded. Queued audio, decoded speaker samples, and response
+messages use PSRAM; queue control structures remain internal. General allocations above
+1 KiB prefer PSRAM, with 64 KiB reserved for internal-only allocations. TLS uses PSRAM.
+
+The wake worker releases its model before TLS startup and reloads after the conversation.
+The main task uses an 8 KiB stack. WebSocket transmit locking is separate from receive,
+and incoming responses are processed on a worker. LED refresh uses a low-priority RMT DMA
+task; the speaker task only publishes the current audio level.
+
+## Setup pages
+
+The board serves HTTP through its password-protected setup AP at 192.168.4.1.
+Both IPv4 and IPv4-mapped IPv6 clients are handled. Host/origin guards protect settings
+requests; ordinary home-LAN access is refused. It is not an automatic captive portal.
+
+The optional computer page at 127.0.0.1:8766 communicates over USB. Secrets are not
+read back from device storage. Both pages expose wake selection, sensitivity,
+speaker volume, and a temporary 60-second detection-only mode. Test mode blocks
+live-session starts and expires automatically. Postal code is stored but unused.
+
+## USB diagnostics
+
+Packets begin with ASCII `HV`, then one byte for packet type and two little-endian bytes
+for payload length (maximum 640). Type 1 is a command; type 2 is PCM; type 3 is JSON status.
+
+| Command | Purpose |
+|:--|:--|
+| I | Firmware identity, audio settings, and device status |
+| N | Connection status, key-present booleans, final usage |
+| D | Audio queue/send timing, transport errors, internal heap |
+| Q | Wake settings, readiness, detection/gap counters |
+| J | Hangup matcher self-tests and spoken hangup counter |
+| L | LED refresh and audio-meter counters |
+| T | Local speaker tone |
+| H | Device portal checks; expected pass mask 15 |
+| G / Z | Start / stop a paid standalone session |
+| C | Enable setup AP and return its private credentials locally |
+
+Do not publish raw diagnostic streams: `C` deliberately returns setup credentials.
+Ordinary status commands do not return API keys or transcripts.
+
+## Validation
+
+- 35 host tests cover protocol handling, audio, readiness, authentication, setup guards, and provisioning confirmation.
+- On-device hangup tests cover fragmented words, punctuation/case, boundaries, and stale data.
+- Three consecutive live sessions connected and finalized after the memory changes.
+- Spoken wake activation, replies, and spoken hangup were confirmed on hardware.
+- Saved key/settings persisted across restarts and firmware updates.
+- LED refresh and audio response were checked through hardware counters and user feedback.
+
+These are development checks, not an endurance certification. Long-duration use,
+interruption quality across rooms, and other board revisions need broader testing.
