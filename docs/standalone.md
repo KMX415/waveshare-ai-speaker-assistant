@@ -112,6 +112,9 @@ Ordinary status commands do not return API keys or transcripts.
 The setup pages also show the previous failure separately from the current session
 status. Starting another conversation does not clear it. The snapshot records the
 first failure of each session and lives in RAM, so restarting/power loss clears it.
+It also records session duration, WebSocket close code, SDK event/error type, and
+socket/TLS error numbers. A later disconnect callback enriches the same record when
+the SDK supplies details after its initial error. Raw server close reasons are not saved.
 
 ## Validation
 

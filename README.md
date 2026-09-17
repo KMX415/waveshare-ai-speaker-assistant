@@ -83,14 +83,22 @@ The API key persists in encrypted NVS after provisioning. **Wi-Fi credentials an
 
 Conversations use paid API access, stop after 60 seconds of inactivity or 10 minutes total, and do not automatically restart after connection failures. Spoken hangup relies on the live input transcript; quoting the exact command can also hang up. BOOT works without transcription.
 
-## What’s next
+## Make it your assistant
+
+The device setup page now includes **Your assistant**: choose its name, purpose and speaking style, town/country, units, and whether to enable live web search and voice volume controls. These preferences survive unplugging. Your saved postal code is used when no town is set.
+
+Ask “Will it rain tomorrow?”, “What is in the news today?” or “Set your volume to 60.” Weather and current information use OpenAI-hosted web search over the speaker's own Wi-Fi connection. Volume changes run on the board and are saved. Search incurs additional API charges; no second API key or PC is required.
+
+See [assistant setup](docs/assistant.md) for examples and limitations. These features are in the source firmware; the older v0.6.1 prebuilt release does not include them.
+
+## What's next
 
 - [ ] Control remote Codex tasks and receive spoken progress updates.
-- [ ] Smart-home actions, weather, reminders, and persistent memory.
+- [ ] Smart-home actions, timers, reminders, music, and persistent conversation memory.
 - [ ] Adjustable LED brightness and themes.
 - [ ] Broader acoustic, interruption, and long-duration testing.
 
-These integrations are **not implemented yet**. Postal code can be saved, but no weather capability uses it.
+These remaining integrations are **not implemented yet**. Codex integration is deferred so everyday features remain independent of a computer.
 
 ## For builders
 

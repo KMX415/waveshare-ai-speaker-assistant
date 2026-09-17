@@ -8,6 +8,7 @@ cJSON *live_voice_failure_status(void);
 cJSON *live_voice_upload_status(void);
 void live_voice_init(void);
 esp_err_t live_voice_start(void);
+esp_err_t live_voice_text(const char *text);
 void live_voice_stop(void);
 bool live_voice_active(void);
 bool live_voice_ready(void);

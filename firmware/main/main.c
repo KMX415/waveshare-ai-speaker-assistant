@@ -13,6 +13,8 @@
 #include "wake_word.h"
 #include "activity_leds.h"
 #include "hangup_phrase.h"
+#include "delegation.h"
+#include "assistant.h"
 #include "driver/gpio.h"
 #include "esp_netif.h"
 #include "driver/usb_serial_jtag.h"
@@ -255,6 +257,26 @@ void app_main(void) {
                 status(report);break;
             }
             case 'N': device_state();break;
+            case 'A': {
+                if(live_voice_active())break;
+                unsigned checks=delegation_selftest();
+                cJSON *bad=assistant_execute("set_volume","{\"volume\":81}");
+                if(cJSON_IsFalse(cJSON_GetObjectItem(bad,"ok")))checks|=32;
+                cJSON_Delete(bad);
+                bad=assistant_execute("set_volume","{\"volume\":20.5}");
+                if(cJSON_IsFalse(cJSON_GetObjectItem(bad,"ok")))checks|=64;
+                cJSON_Delete(bad);
+                bad=assistant_execute("unknown","{}");
+                if(cJSON_IsFalse(cJSON_GetObjectItem(bad,"ok")))checks|=128;
+                cJSON_Delete(bad);
+                char report[96];snprintf(report,sizeof(report),"{\"type\":\"assistant_test\",\"checks\":%u}",checks);status(report);break;
+            }
+            case 'Y': {
+                char text[601];unsigned n=length-1;
+                if(n>600)break;
+                memcpy(text,data+1,n);text[n]=0;
+                status(live_voice_text(text)==ESP_OK?"{\"type\":\"text_request\",\"ok\":true}":"{\"type\":\"text_request\",\"ok\":false}");break;
+            }
             case 'U': {cJSON *j=live_voice_upload_status();char *s=cJSON_PrintUnformatted(j);if(s){status(s);free(s);}cJSON_Delete(j);break;}
             case 'B': {
                 char report[640];snprintf(report,sizeof(report),"{\"type\":\"playback_status\",\"queued_frames\":%u,\"peak_frames\":%u,\"short_refill_gaps\":%u,\"prefill_ms\":%u,\"capacity_ms\":%u,\"enqueue_waits\":%u,\"chunks\":%u,\"samples\":%u,\"chunk_min\":%u,\"chunk_max\":%u,\"arrival_max_ms\":%u,\"partial_flushes\":%u,\"writes\":%u,\"write_max_ms\":%u,\"slow_writes\":%u}",(unsigned)uxQueueMessagesWaiting(playback),atomic_load(&playback_peak),atomic_load(&playback_gaps),PLAYBACK_WAIT_MS,PLAYBACK_FRAMES*20,atomic_load(&playback_enqueue_waits),atomic_load(&playback_chunks),atomic_load(&playback_samples),atomic_load(&playback_chunk_min),atomic_load(&playback_chunk_max),atomic_load(&playback_arrival_max_ms),atomic_load(&playback_partial_flushes),atomic_load(&playback_writes),atomic_load(&playback_write_max_ms),atomic_load(&playback_slow_writes));status(report);break;

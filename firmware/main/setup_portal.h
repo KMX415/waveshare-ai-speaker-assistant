@@ -4,6 +4,7 @@
 #include <stdint.h>
 uint32_t setup_portal_selftest(void);
 int setup_portal_volume(void);
+const char *setup_portal_postal(void);
 int setup_portal_wifi_candidates(void);
 int setup_portal_wifi_best_rssi(void);
 esp_err_t setup_portal_set_volume(int value);

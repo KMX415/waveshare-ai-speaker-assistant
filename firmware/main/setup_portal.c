@@ -3,6 +3,7 @@
 #include "credentials.h"
 #include "live_voice.h"
 #include "wake_word.h"
+#include "assistant.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,6 +62,7 @@ static void wifi_event(void *unused,esp_event_base_t base,int32_t id,void *data)
     } else if(id==WIFI_EVENT_STA_CONNECTED)esp_timer_stop(reconnect_timer);
 }
 int setup_portal_volume(void) { return volume; }
+const char *setup_portal_postal(void) { return postal; }
 esp_err_t setup_portal_set_volume(int value) {
     if (value < 0 || value > 80) return ESP_ERR_INVALID_ARG;
     esp_err_t result = board_audio_volume(value);
@@ -186,6 +188,7 @@ static esp_err_t handle(httpd_req_t *r) {
         cJSON_AddNumberToObject(body,"usage_seconds",live_voice_usage_seconds());
         cJSON_AddItemToObject(body,"wake",wake_word_status());
         cJSON_AddItemToObject(body,"failure",live_voice_failure_status());
+        cJSON_AddItemToObject(body,"assistant",assistant_settings());
     } else if (!strcmp(r->uri,"/api/scan")) {
         if (esp_wifi_scan_start(NULL,true) != ESP_OK) { cJSON_Delete(body); return error(r,"Scan unavailable while connecting. Try again shortly."); }
         wifi_ap_record_t records[24]; uint16_t count = 24;
@@ -199,17 +202,21 @@ static esp_err_t handle(httpd_req_t *r) {
             cJSON_AddItemToArray(networks,network);
         }
     } else {
-        if (r->content_len <= 0 || r->content_len > 1024) { cJSON_Delete(body); return error(r,"Invalid request size"); }
-        char buffer[1025]; size_t done=0;
+        if (r->content_len <= 0 || r->content_len > 4096) { cJSON_Delete(body); return error(r,"Invalid request size"); }
+        char *buffer=calloc(1,r->content_len+1); size_t done=0;
+        if(!buffer){cJSON_Delete(body);return error(r,"Not enough memory");}
         while (done<r->content_len) {
             int n=httpd_req_recv(r,buffer+done,r->content_len-done);
-            if(n<=0){cJSON_Delete(body);return ESP_FAIL;} done+=n;
+            if(n<=0){free(buffer);cJSON_Delete(body);return ESP_FAIL;} done+=n;
         }
         buffer[done]=0;
         cJSON *input=cJSON_Parse(buffer);
+        memset(buffer,0,r->content_len+1);free(buffer);
         if (!input) { cJSON_Delete(body); return error(r,"Invalid JSON"); }
         esp_err_t result=ESP_OK;
-        if (!strcmp(r->uri,"/api/key")) {
+        if (!strcmp(r->uri,"/api/assistant")) {
+            result=live_voice_active()?ESP_ERR_INVALID_STATE:assistant_save(input);
+        } else if (!strcmp(r->uri,"/api/key")) {
             cJSON *key=cJSON_GetObjectItem(input,"key");
             if(live_voice_active()||!cJSON_IsString(key)) result=ESP_ERR_INVALID_STATE;
             else result=credentials_set(key->valuestring);
@@ -266,7 +273,7 @@ static esp_err_t handle(httpd_req_t *r) {
                 memset(password,0,sizeof(password));
             }
         } else result=ESP_ERR_NOT_SUPPORTED;
-        cJSON_Delete(input); memset(buffer,0,sizeof(buffer));
+        cJSON_Delete(input);
         if(result!=ESP_OK) {cJSON_Delete(body);return error(r,"Could not apply settings. Check the fields and try again.");}
         cJSON_AddBoolToObject(body,"ok",true);
         if(!strcmp(r->uri,"/api/key"))cJSON_AddBoolToObject(body,"key_saved",credentials_saved());
@@ -287,6 +294,7 @@ void setup_portal_init(void) {
     // Ordinary settings stay in their existing partition. Never auto-provision eFuses.
     ESP_ERROR_CHECK(nvs_flash_init_partition("nvs"));
     ESP_ERROR_CHECK(nvs_open("home_voice",NVS_READWRITE,&storage));
+    assistant_init();
     load_string("setup_password",ap_password,sizeof(ap_password));
     if(!ap_password[0]) {
         snprintf(ap_password,sizeof(ap_password),"%08lx%08lx",(unsigned long)esp_random(),(unsigned long)esp_random());
@@ -318,8 +326,8 @@ void setup_portal_init(void) {
         select_startup_access_point(&config);
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA,&config)); esp_wifi_connect(); memset(password,0,sizeof(password));
     }
-    httpd_handle_t server; httpd_config_t http=HTTPD_DEFAULT_CONFIG(); http.stack_size=8192;
+    httpd_handle_t server; httpd_config_t http=HTTPD_DEFAULT_CONFIG(); http.stack_size=8192;http.max_uri_handlers=9;
     ESP_ERROR_CHECK(httpd_start(&server,&http));
-    const char *paths[]={"/","/api/status","/api/scan","/api/preferences","/api/wifi","/api/key","/api/voice","/api/wake"};
-    for(int i=0;i<8;i++) {httpd_uri_t route={.uri=paths[i],.method=i<3?HTTP_GET:HTTP_POST,.handler=handle};ESP_ERROR_CHECK(httpd_register_uri_handler(server,&route));}
+    const char *paths[]={"/","/api/status","/api/scan","/api/preferences","/api/wifi","/api/key","/api/voice","/api/wake","/api/assistant"};
+    for(int i=0;i<9;i++) {httpd_uri_t route={.uri=paths[i],.method=i<3?HTTP_GET:HTTP_POST,.handler=handle};ESP_ERROR_CHECK(httpd_register_uri_handler(server,&route));}
 }
