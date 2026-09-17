@@ -5,6 +5,7 @@
 #include "wake_word.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_timer.h"
@@ -23,6 +24,31 @@ static char ap_name[32], ap_password[25], saved_ssid[33], postal[17];
 static int32_t volume = 40, gain = 24;
 static bool ap_enabled;
 static esp_timer_handle_t reconnect_timer;
+static int startup_candidates, startup_best_rssi=-127;
+int setup_portal_wifi_candidates(void){return startup_candidates;}
+int setup_portal_wifi_best_rssi(void){return startup_best_rssi;}
+static void select_startup_access_point(wifi_config_t *config){
+    char ssid[33]={0};memcpy(ssid,config->sta.ssid,32);
+    wifi_scan_config_t scan={.ssid=(uint8_t *)ssid,.show_hidden=true};
+    if(esp_wifi_scan_start(&scan,true)!=ESP_OK)return;
+    uint16_t count=32;
+    wifi_ap_record_t *records=calloc(count,sizeof(*records));
+    if(!records){esp_wifi_clear_ap_list();return;}
+    if(esp_wifi_scan_get_ap_records(&count,records)==ESP_OK){
+        int best=-1;
+        for(unsigned i=0;i<count;i++){
+            if(strncmp((char *)records[i].ssid,ssid,32))continue;
+            startup_candidates++;
+            if(best<0 || records[i].rssi>records[best].rssi)best=i;
+        }
+        if(best>=0){
+            startup_best_rssi=records[best].rssi;
+            memcpy(config->sta.bssid,records[best].bssid,6);
+            config->sta.bssid_set=true;config->sta.channel=records[best].primary;
+        }
+    }
+    free(records);
+}
 static void reconnect_wifi(void *unused) {
     wifi_config_t config={0};
     if(esp_wifi_get_config(WIFI_IF_STA,&config)==ESP_OK && config.sta.ssid[0])esp_wifi_connect();
@@ -289,6 +315,7 @@ void setup_portal_init(void) {
         config.sta.scan_method=WIFI_ALL_CHANNEL_SCAN;
         config.sta.sort_method=WIFI_CONNECT_AP_BY_SIGNAL;
         memcpy(config.sta.ssid,saved_ssid,strlen(saved_ssid)); memcpy(config.sta.password,password,strlen(password));
+        select_startup_access_point(&config);
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA,&config)); esp_wifi_connect(); memset(password,0,sizeof(password));
     }
     httpd_handle_t server; httpd_config_t http=HTTPD_DEFAULT_CONFIG(); http.stack_size=8192;

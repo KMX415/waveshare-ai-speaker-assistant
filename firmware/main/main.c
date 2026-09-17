@@ -27,12 +27,13 @@
 #include "esp_log.h"
 
 typedef struct { int16_t samples[AUDIO_SAMPLES]; } audio_frame;
-enum { PLAYBACK_FRAMES=32, PLAYBACK_PREFILL=8, PLAYBACK_WAIT_MS=160 };
+enum { PLAYBACK_FRAMES=160, PLAYBACK_PREFILL=8, PLAYBACK_WAIT_MS=160 };
 static QueueHandle_t playback;
 static atomic_uint playback_epoch,playback_peak,playback_gaps,last_enqueue_ms;
 static atomic_uint playback_chunks,playback_samples,playback_partial_flushes;
 static atomic_uint playback_chunk_min,playback_chunk_max,playback_arrival_max_ms;
 static atomic_uint playback_writes,playback_write_max_ms,playback_slow_writes;
+static atomic_uint playback_enqueue_waits;
 static SemaphoreHandle_t tx_lock;
 static atomic_bool streaming;
 static atomic_int tone_frames;
@@ -59,7 +60,10 @@ bool audio_enqueue(const int16_t *samples,size_t count) {
         memcpy(queued_frame.samples+queued_samples,samples,take*2);queued_samples+=take;samples+=take;count-=take;
         if(queued_samples==AUDIO_SAMPLES) {
             queued_samples=0;
-            if(xQueueSend(playback,&queued_frame,pdMS_TO_TICKS(30))!=pdTRUE){ok=false;break;}
+            if(xQueueSend(playback,&queued_frame,0)!=pdTRUE){
+                atomic_fetch_add(&playback_enqueue_waits,1);
+                if(xQueueSend(playback,&queued_frame,pdMS_TO_TICKS(30))!=pdTRUE){ok=false;break;}
+            }
             unsigned depth=uxQueueMessagesWaiting(playback);
             if(depth>atomic_load(&playback_peak))atomic_store(&playback_peak,depth);
         }
@@ -114,7 +118,7 @@ static void speaker_task(void *unused) {
         if(epoch!=current_epoch){epoch=current_epoch;playing=false;first_wait=0;gap_started=0;}
         // Flush a final short PCM frame instead of leaving the last syllable stranded.
         if(xSemaphoreTake(playback_lock,0)==pdTRUE){
-            if(queued_samples && now-atomic_load(&last_enqueue_ms)>=240){
+            if(queued_samples && (int32_t)(now-atomic_load(&last_enqueue_ms))>=240){
                 memset(queued_frame.samples+queued_samples,0,(AUDIO_SAMPLES-queued_samples)*sizeof(int16_t));
                 if(xQueueSend(playback,&queued_frame,0)==pdTRUE){queued_samples=0;atomic_fetch_add(&playback_partial_flushes,1);}
             }
@@ -253,7 +257,7 @@ void app_main(void) {
             case 'N': device_state();break;
             case 'U': {cJSON *j=live_voice_upload_status();char *s=cJSON_PrintUnformatted(j);if(s){status(s);free(s);}cJSON_Delete(j);break;}
             case 'B': {
-                char report[640];snprintf(report,sizeof(report),"{\"type\":\"playback_status\",\"queued_frames\":%u,\"peak_frames\":%u,\"short_refill_gaps\":%u,\"prefill_ms\":%u,\"capacity_ms\":640,\"chunks\":%u,\"samples\":%u,\"chunk_min\":%u,\"chunk_max\":%u,\"arrival_max_ms\":%u,\"partial_flushes\":%u,\"writes\":%u,\"write_max_ms\":%u,\"slow_writes\":%u}",(unsigned)uxQueueMessagesWaiting(playback),atomic_load(&playback_peak),atomic_load(&playback_gaps),PLAYBACK_WAIT_MS,atomic_load(&playback_chunks),atomic_load(&playback_samples),atomic_load(&playback_chunk_min),atomic_load(&playback_chunk_max),atomic_load(&playback_arrival_max_ms),atomic_load(&playback_partial_flushes),atomic_load(&playback_writes),atomic_load(&playback_write_max_ms),atomic_load(&playback_slow_writes));status(report);break;
+                char report[640];snprintf(report,sizeof(report),"{\"type\":\"playback_status\",\"queued_frames\":%u,\"peak_frames\":%u,\"short_refill_gaps\":%u,\"prefill_ms\":%u,\"capacity_ms\":%u,\"enqueue_waits\":%u,\"chunks\":%u,\"samples\":%u,\"chunk_min\":%u,\"chunk_max\":%u,\"arrival_max_ms\":%u,\"partial_flushes\":%u,\"writes\":%u,\"write_max_ms\":%u,\"slow_writes\":%u}",(unsigned)uxQueueMessagesWaiting(playback),atomic_load(&playback_peak),atomic_load(&playback_gaps),PLAYBACK_WAIT_MS,PLAYBACK_FRAMES*20,atomic_load(&playback_enqueue_waits),atomic_load(&playback_chunks),atomic_load(&playback_samples),atomic_load(&playback_chunk_min),atomic_load(&playback_chunk_max),atomic_load(&playback_arrival_max_ms),atomic_load(&playback_partial_flushes),atomic_load(&playback_writes),atomic_load(&playback_write_max_ms),atomic_load(&playback_slow_writes));status(report);break;
             }
             case 'F': {cJSON *j=live_voice_failure_status();char *s=cJSON_PrintUnformatted(j);if(s){status(s);free(s);}cJSON_Delete(j);break;}
             case 'J': {

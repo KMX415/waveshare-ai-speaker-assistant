@@ -24,12 +24,14 @@ The activity clock is initialized before marking a session ready, and idle check
 allow an activity timestamp to be newer than the loop's sampled time.
 Wi-Fi disconnects schedule a reconnect after five seconds; a failed voice session
 does not automatically open another paid session.
-Wi-Fi connections scan all channels and prefer the strongest matching access point,
-including when multiple mesh nodes advertise the saved network name. This chooses
-an access point on connection; it does not implement continuous roaming.
-Connected voice sockets use one-second send/receive timeouts in addition to the
-WebSocket send timeout. These bound individual blocking socket operations, not the
-entire connection shutdown sequence.
+At startup, Wi-Fi scans the saved network across channels and explicitly selects
+the strongest discovered matching access point for this boot. The choice is kept
+in RAM, not saved with credentials; powering on in a new room scans again.
+The upload report includes candidate count and selected signal strength without
+revealing network names or access-point addresses. This is not continuous roaming.
+Wi-Fi saved through setup uses the SDK's all-channel, strongest-signal preference.
+Voice sockets retain the SDK's connection-time socket timeouts; the separate
+WebSocket send timeout is not an end-to-end deadline for shutdown.
 
 ## Audio and memory
 
@@ -48,13 +50,16 @@ restart. It does not retain arbitrary console lines or audio. This capture is
 in PC memory and clears when PC setup restarts; device failure counters clear on boot.
 Upload buffers also live in PSRAM, keeping the networking task stack small.
 Playback now primes with 160 ms of audio (or a 160 ms maximum wait for a short clip),
-with a 640 ms queue capacity to absorb delivery bursts. A final partial PCM frame
+with a 3.2-second PSRAM queue capacity to absorb delivery bursts without immediately
+blocking the response decoder. The initial playback threshold remains 160 ms;
+capacity is a bound, not a mandatory playback delay. A final partial PCM frame
 is padded after 240 ms without more data, avoiding premature padding between bursts.
 I2S DMA blocks match the application's 20 ms audio frames for steadier writes.
 Acknowledgment tones pause dequeueing rather than discarding incoming speech.
 The tradeoff is a small extra playback delay. USB `B` reports queue depth/peak and
 short refill gaps, incoming chunk sizes/timing, partial-frame padding, and slow
-speaker writes; ordinary brief pauses can also increment the gap counter.
+speaker writes, plus full-queue enqueue waits; ordinary brief pauses can also
+increment the gap counter.
 
 Queued audio, decoded speaker samples, and response
 messages use PSRAM; queue control structures remain internal. General allocations above
