@@ -15,6 +15,7 @@
 #include "hangup_phrase.h"
 #include "delegation.h"
 #include "assistant.h"
+#include "mic_control.h"
 #include "driver/gpio.h"
 #include "esp_netif.h"
 #include "driver/usb_serial_jtag.h"
@@ -32,6 +33,9 @@ typedef struct { int16_t samples[AUDIO_SAMPLES]; } audio_frame;
 enum { PLAYBACK_FRAMES=160, PLAYBACK_PREFILL=8, PLAYBACK_WAIT_MS=160 };
 static QueueHandle_t playback;
 static atomic_uint playback_epoch,playback_peak,playback_gaps,last_enqueue_ms;
+static atomic_uint last_speaker_signal,speaker_generation;
+unsigned audio_output_generation(void){return atomic_load(&speaker_generation);}
+bool audio_is_playing(void){return uxQueueMessagesWaiting(playback)>0 || (unsigned)(esp_timer_get_time()/1000)-atomic_load(&last_speaker_signal)<500;}
 static atomic_uint playback_chunks,playback_samples,playback_partial_flushes;
 static atomic_uint playback_chunk_min,playback_chunk_max,playback_arrival_max_ms;
 static atomic_uint playback_writes,playback_write_max_ms,playback_slow_writes;
@@ -144,6 +148,7 @@ static void speaker_task(void *unused) {
             }
             if(playing && xQueueReceive(playback,&frame,0)!=pdTRUE){playing=false;gap_started=now;}
         }
+        for(unsigned i=0;i<AUDIO_SAMPLES;i++)if(frame.samples[i]>8||frame.samples[i]<-8){last_speaker_signal=now;atomic_fetch_add(&speaker_generation,1);break;}
         int64_t write_started=esp_timer_get_time();
         ESP_ERROR_CHECK(board_audio_write(frame.samples));
         unsigned write_ms=(unsigned)((esp_timer_get_time()-write_started)/1000);
@@ -175,6 +180,7 @@ static void mic_task(void *unused) {
             reference[filled++] = raw[4*i];
             if (filled == chunk) {
                 aec_process(aec, mic, reference, clean);
+                mic_control_process(clean,mic,chunk);
                 live_voice_feed(clean,chunk);
                 wake_word_feed(clean,chunk);
                 if (atomic_load(&streaming)) {
@@ -219,6 +225,7 @@ void app_main(void) {
     credentials_init();
     live_voice_init();
     setup_portal_init();
+    mic_control_init();
     wake_word_init();
     activity_leds_init();
     xTaskCreate(speaker_task, "speaker", 6144, NULL, 6, NULL);
@@ -257,6 +264,16 @@ void app_main(void) {
                 status(report);break;
             }
             case 'N': device_state();break;
+            case 'M': {
+                cJSON *j=mic_control_status();
+                if(length==2 && data[1]==1 && !live_voice_active())cJSON_AddNumberToObject(j,"selftest",mic_control_selftest());
+                char *s=cJSON_PrintUnformatted(j);if(s){status(s);free(s);}cJSON_Delete(j);break;
+            }
+            case 'O': {
+                if(length!=2 || (data[1] && live_voice_active()))break;
+                cJSON *j=assistant_diagnostics(data[1]);char *s=cJSON_PrintUnformatted(j);
+                if(s){status(s);free(s);}cJSON_Delete(j);break;
+            }
             case 'A': {
                 if(live_voice_active())break;
                 unsigned checks=delegation_selftest();

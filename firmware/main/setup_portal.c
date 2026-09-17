@@ -4,6 +4,8 @@
 #include "live_voice.h"
 #include "wake_word.h"
 #include "assistant.h"
+#include "mic_control.h"
+#include <stdatomic.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +24,9 @@
 static nvs_handle_t storage;
 static esp_netif_t *station;
 static char ap_name[32], ap_password[25], saved_ssid[33], postal[17];
-static int32_t volume = 40, gain = 24;
+static int32_t volume = 40;
+static atomic_int gain = 24;
+static atomic_bool auto_gain;
 static bool ap_enabled;
 static esp_timer_handle_t reconnect_timer;
 static int startup_candidates, startup_best_rssi=-127;
@@ -62,6 +66,26 @@ static void wifi_event(void *unused,esp_event_base_t base,int32_t id,void *data)
     } else if(id==WIFI_EVENT_STA_CONNECTED)esp_timer_stop(reconnect_timer);
 }
 int setup_portal_volume(void) { return volume; }
+int setup_portal_gain(void){return atomic_load(&gain);}
+bool setup_portal_auto_gain(void){return atomic_load(&auto_gain);}
+esp_err_t setup_portal_set_microphone(int value,bool automatic,bool persist) {
+    if(value<0||value>36)return ESP_ERR_INVALID_ARG;
+    int before=atomic_load(&gain);bool before_auto=atomic_load(&auto_gain);
+    esp_err_t result=board_audio_gain(value);
+    if(result!=ESP_OK)return result;
+    if(persist){
+        result=nvs_set_i32(storage,"gain",value);
+        if(result==ESP_OK)result=nvs_set_i32(storage,"auto_gain",automatic);
+        if(result==ESP_OK)result=nvs_commit(storage);
+    }
+    if(result==ESP_OK){atomic_store(&gain,value);atomic_store(&auto_gain,automatic);}
+    else {
+        board_audio_gain(before);
+        // Remove pending writes so a later settings commit cannot save a failed change.
+        nvs_set_i32(storage,"gain",before);nvs_set_i32(storage,"auto_gain",before_auto);nvs_commit(storage);
+    }
+    return result;
+}
 const char *setup_portal_postal(void) { return postal; }
 esp_err_t setup_portal_set_volume(int value) {
     if (value < 0 || value > 80) return ESP_ERR_INVALID_ARG;
@@ -179,6 +203,7 @@ static esp_err_t handle(httpd_req_t *r) {
         cJSON_AddStringToObject(body,"zip",postal);
         cJSON_AddNumberToObject(body,"volume",volume);
         cJSON_AddNumberToObject(body,"gain",gain);
+        cJSON_AddItemToObject(body,"microphone",mic_control_status());
         cJSON_AddBoolToObject(body,"key_set",credentials_present());
         cJSON_AddBoolToObject(body,"key_saved",credentials_saved());
         cJSON_AddBoolToObject(body,"secure_storage",credentials_secure_storage());
@@ -189,6 +214,7 @@ static esp_err_t handle(httpd_req_t *r) {
         cJSON_AddItemToObject(body,"wake",wake_word_status());
         cJSON_AddItemToObject(body,"failure",live_voice_failure_status());
         cJSON_AddItemToObject(body,"assistant",assistant_settings());
+        cJSON_AddItemToObject(body,"memories",assistant_memories());
     } else if (!strcmp(r->uri,"/api/scan")) {
         if (esp_wifi_scan_start(NULL,true) != ESP_OK) { cJSON_Delete(body); return error(r,"Scan unavailable while connecting. Try again shortly."); }
         wifi_ap_record_t records[24]; uint16_t count = 24;
@@ -214,7 +240,10 @@ static esp_err_t handle(httpd_req_t *r) {
         memset(buffer,0,r->content_len+1);free(buffer);
         if (!input) { cJSON_Delete(body); return error(r,"Invalid JSON"); }
         esp_err_t result=ESP_OK;
-        if (!strcmp(r->uri,"/api/assistant")) {
+        if (!strcmp(r->uri,"/api/forget")) {
+            cJSON *key=cJSON_GetObjectItemCaseSensitive(input,"key");
+            result=live_voice_active()?ESP_ERR_INVALID_STATE:(!cJSON_IsString(key)?ESP_ERR_INVALID_ARG:assistant_forget(key->valuestring));
+        } else if (!strcmp(r->uri,"/api/assistant")) {
             result=live_voice_active()?ESP_ERR_INVALID_STATE:assistant_save(input);
         } else if (!strcmp(r->uri,"/api/key")) {
             cJSON *key=cJSON_GetObjectItem(input,"key");
@@ -238,7 +267,7 @@ static esp_err_t handle(httpd_req_t *r) {
             else result=ESP_ERR_INVALID_ARG;
         } else if (!strcmp(r->uri,"/api/preferences")) {
             cJSON *v=cJSON_GetObjectItem(input,"volume"), *g=cJSON_GetObjectItem(input,"gain"), *z=cJSON_GetObjectItem(input,"zip");
-            if(!cJSON_IsNumber(v)||v->valuedouble<0||v->valuedouble>80||!cJSON_IsNumber(g)||g->valuedouble<0||g->valuedouble>36||!cJSON_IsString(z)||strlen(z->valuestring)>16) result=ESP_ERR_INVALID_ARG;
+            if(mic_control_active()||!cJSON_IsNumber(v)||v->valuedouble<0||v->valuedouble>80||!cJSON_IsNumber(g)||g->valuedouble<0||g->valuedouble>36||!cJSON_IsString(z)||strlen(z->valuestring)>16) result=ESP_ERR_INVALID_ARG;
             else {
                 volume=v->valueint; gain=g->valueint; strlcpy(postal,z->valuestring,sizeof(postal));
                 result=board_audio_volume(volume);
@@ -302,7 +331,9 @@ void setup_portal_init(void) {
         ESP_ERROR_CHECK(nvs_commit(storage));
     }
     load_string("ssid",saved_ssid,sizeof(saved_ssid)); load_string("zip",postal,sizeof(postal));
-    nvs_get_i32(storage,"volume",&volume); nvs_get_i32(storage,"gain",&gain);
+    int32_t saved_gain=24,saved_auto=0;
+    nvs_get_i32(storage,"volume",&volume);nvs_get_i32(storage,"gain",&saved_gain);nvs_get_i32(storage,"auto_gain",&saved_auto);
+    gain=saved_gain;auto_gain=saved_auto==1;
     if(volume<0||volume>80)volume=40;
     if(gain<0||gain>36)gain=24;
     ESP_ERROR_CHECK(board_audio_volume(volume)); ESP_ERROR_CHECK(board_audio_gain(gain));
@@ -326,8 +357,8 @@ void setup_portal_init(void) {
         select_startup_access_point(&config);
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA,&config)); esp_wifi_connect(); memset(password,0,sizeof(password));
     }
-    httpd_handle_t server; httpd_config_t http=HTTPD_DEFAULT_CONFIG(); http.stack_size=8192;http.max_uri_handlers=9;
+    httpd_handle_t server; httpd_config_t http=HTTPD_DEFAULT_CONFIG(); http.stack_size=8192;http.max_uri_handlers=10;
     ESP_ERROR_CHECK(httpd_start(&server,&http));
-    const char *paths[]={"/","/api/status","/api/scan","/api/preferences","/api/wifi","/api/key","/api/voice","/api/wake","/api/assistant"};
-    for(int i=0;i<9;i++) {httpd_uri_t route={.uri=paths[i],.method=i<3?HTTP_GET:HTTP_POST,.handler=handle};ESP_ERROR_CHECK(httpd_register_uri_handler(server,&route));}
+    const char *paths[]={"/","/api/status","/api/scan","/api/preferences","/api/wifi","/api/key","/api/voice","/api/wake","/api/assistant","/api/forget"};
+    for(int i=0;i<10;i++) {httpd_uri_t route={.uri=paths[i],.method=i<3?HTTP_GET:HTTP_POST,.handler=handle};ESP_ERROR_CHECK(httpd_register_uri_handler(server,&route));}
 }

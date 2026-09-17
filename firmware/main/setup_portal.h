@@ -2,8 +2,12 @@
 #include "esp_err.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 uint32_t setup_portal_selftest(void);
 int setup_portal_volume(void);
+int setup_portal_gain(void);
+bool setup_portal_auto_gain(void);
+esp_err_t setup_portal_set_microphone(int gain,bool automatic,bool persist);
 const char *setup_portal_postal(void);
 int setup_portal_wifi_candidates(void);
 int setup_portal_wifi_best_rssi(void);

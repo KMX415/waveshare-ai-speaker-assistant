@@ -5,6 +5,7 @@
 #include "hangup_phrase.h"
 #include "assistant.h"
 #include "delegation.h"
+#include "mic_control.h"
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -267,7 +268,8 @@ static bool run_tools(esp_websocket_client_handle_t client,cJSON *calls) {
         cJSON *generation=cJSON_GetObjectItem(calls,"generation");
         if(!generation || generation->valuedouble!=atomic_load(&session_started_ms))return true;
         cJSON *event=cJSON_DetachItemFromObject(calls,"request");
-        return send_json(client,event) && send_json(client,cJSON_Parse("{\"type\":\"response.create\"}"));
+        bool instruction=cJSON_IsTrue(cJSON_GetObjectItem(calls,"instruction"));
+        return send_json(client,event) && (instruction || send_json(client,cJSON_Parse("{\"type\":\"response.create\"}")));
     }
     cJSON *call;
     cJSON_ArrayForEach(call,calls) {
@@ -294,6 +296,14 @@ esp_err_t live_voice_text(const char *text) {
     cJSON *part=cJSON_CreateObject();cJSON_AddStringToObject(part,"type","input_text");cJSON_AddStringToObject(part,"text",text);cJSON_AddItemToArray(content,part);
     if(xQueueSend(tool_calls,&j,0)!=pdTRUE){cJSON_Delete(j);return ESP_ERR_NO_MEM;}
     return ESP_OK;
+}
+bool live_voice_instruction(const char *text) {
+    if(!live_voice_ready())return false;
+    cJSON *j=cJSON_CreateObject(),*event=cJSON_AddObjectToObject(j,"request");
+    cJSON_AddNumberToObject(j,"generation",atomic_load(&session_started_ms));cJSON_AddBoolToObject(j,"instruction",true);
+    cJSON_AddStringToObject(event,"type","session.instructions.append");cJSON_AddNullToObject(event,"delegation_id");cJSON_AddStringToObject(event,"content",text);
+    if(!j||!event||xQueueSend(tool_calls,&j,0)!=pdTRUE){cJSON_Delete(j);return false;}
+    return true;
 }
 
 static void session_task(void *unused) {
@@ -350,6 +360,7 @@ static void session_task(void *unused) {
     free(start_event);start_event=NULL;
     uint32_t began=esp_timer_get_time()/1000;
     while(!atomic_load(&stopping)) {
+        mic_control_tick();
         uint32_t now=esp_timer_get_time()/1000;
         if(!atomic_load(&ready)&&now-began>20000){fail("Voice startup timed out");break;}
         if(now-began>600000)limit_reason="Ready; 10-minute conversation limit reached";
@@ -391,6 +402,7 @@ static void session_task(void *unused) {
         }
     }
 cleanup:
+    mic_control_cancel();
     free(start_event);
     atomic_store(&ready,false);audio_clear();
     if(client) {

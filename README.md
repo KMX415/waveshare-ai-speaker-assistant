@@ -85,16 +85,22 @@ Conversations use paid API access, stop after 60 seconds of inactivity or 10 min
 
 ## Make it your assistant
 
-The device setup page now includes **Your assistant**: choose its name, purpose and speaking style, town/country, units, and whether to enable live web search and voice volume controls. These preferences survive unplugging. Your saved postal code is used when no town is set.
+The device setup page now includes **Your assistant**: choose its name, purpose and speaking style, town/country, units, and whether to enable live web search, voice controls and automatic memory. These preferences survive unplugging. Your saved postal code is used when no town is set.
 
 Ask “Will it rain tomorrow?”, “What is in the news today?” or “Set your volume to 60.” Weather and current information use OpenAI-hosted web search over the speaker's own Wi-Fi connection. Volume changes run on the board and are saved. Search incurs additional API charges; no second API key or PC is required.
+
+Say “Save my location as Portland, Maine, USA,” “Call yourself Sage,” or “Remember that I prefer vegetarian recipes.” The speaker saves these across restarts. Optional automatic memory captures useful facts you mention directly during conversations; it is off by default. Review or delete the 12 short saved memories in setup, or ask it to forget one. Memories use ordinary unencrypted device storage and are sent as context in future OpenAI conversations. Renaming the assistant does not change its Jarvis/Computer wake phrase.
+
+Say **“Jarvis, calibrate your microphone”** for spoken room-noise, speech and verification steps. It saves a gain only after verification. Automatic speech-level adjustment can also be switched on or off by voice. No configuration page or computer is needed for calibration; see the [microphone guide](docs/assistant.md#spoken-microphone-setup).
+
+Change voices hands-free: say **"Change your voice to Cedar"**, then end the conversation and wake it again. Your choice survives unplugging. Ask **"What voices can I choose?"** for options. See [assistant settings](docs/assistant.md#change-the-speaking-voice).
 
 See [assistant setup](docs/assistant.md) for examples and limitations. These features are in the source firmware; the older v0.6.1 prebuilt release does not include them.
 
 ## What's next
 
 - [ ] Control remote Codex tasks and receive spoken progress updates.
-- [ ] Smart-home actions, timers, reminders, music, and persistent conversation memory.
+- [ ] Smart-home actions, timers, reminders, music, and conversation history.
 - [ ] Adjustable LED brightness and themes.
 - [ ] Broader acoustic, interruption, and long-duration testing.
 

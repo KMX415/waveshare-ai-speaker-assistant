@@ -14,7 +14,7 @@ through GitHub issues, pull requests, or chat.
 ## Storage boundary
 
 - OpenAI API key: HMAC-derived encrypted NVS in a dedicated partition after provisioning.
-- Wi-Fi credentials and ordinary preferences: **unencrypted NVS**.
+- Wi-Fi credentials, ordinary preferences, and saved memories: **unencrypted NVS**. Memories are shared on the speaker and included in future OpenAI conversations; do not store credentials in them.
 - Setup network: WPA2 with an individual generated password; HTTP settings pages are
   restricted to this interface. HTTP itself is not end-to-end encrypted.
 - OpenAI connection: TLS with certificate validation.

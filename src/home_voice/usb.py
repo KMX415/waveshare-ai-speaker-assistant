@@ -137,6 +137,7 @@ class BoardLink:
         self.failure = {}
         self.playback = {}
         self.upload = {}
+        self.microphone = {}
         self.crash = CrashCapture()
         self.wake = {}
         self.wake_ack = threading.Event()
@@ -197,6 +198,7 @@ class BoardLink:
                         elif category == "voice_failure": self.failure = event
                         elif category == "playback_status": self.playback = event
                         elif category == "upload_status": self.upload = event
+                        elif category == "microphone_status": self.microphone = event
                         elif category in ("wake_saved", "wake_error"):
                             self.wake_ok = category == "wake_saved"
                             self.wake_ack.set()
@@ -213,6 +215,7 @@ class BoardLink:
                         self.command(b"F")
                         self.command(b"B")
                         self.command(b"U")
+                        self.command(b"M")
                     heartbeat = time.monotonic()
         except Exception:
             if not self.closed.is_set():
