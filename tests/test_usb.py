@@ -4,11 +4,30 @@ import json
 import queue
 import threading
 from websockets.asyncio.server import serve
-from home_voice.usb import BoardLink, Decoder, encode_packet
+from home_voice.usb import BoardLink, Decoder, CrashCapture, encode_packet
 from unittest.mock import Mock
 
 
 class USBTests(unittest.TestCase):
+    def test_panic_capture_preserves_packets_and_excludes_raw_logs(self):
+        crash=CrashCapture();decoder=Decoder(crash.feed)
+        payload=b'private microphone bytes\nBacktrace: 0xdeadbeef:0xdeadbeef\n'
+        wire=(b'private configuration must not be retained\n'
+              b'Guru Meditation Error: Core 0 panic\'ed (LoadProhibited).\n'
+              +encode_packet(2,payload)
+              +b'Backtrace: 0x42001234:0x3fc01234 0x40371234:0x3fc01254 arbitrary text\n'
+              +encode_packet(3,b'{}'))
+        packets=[]
+        for i in range(0,len(wire),3):packets.extend(decoder.feed(wire[i:i+3]))
+        self.assertEqual(packets,[(2,payload),(3,b'{}')])
+        self.assertEqual(crash.lines,['Panic: LoadProhibited','Backtrace: 0x42001234:0x3fc01234 0x40371234:0x3fc01254'])
+
+    def test_panic_capture_is_bounded(self):
+        crash=CrashCapture();crash.feed(b'x'*10000)
+        self.assertLessEqual(len(crash.pending),4096)
+        crash.feed(b'\n'+b'abort() was called at PC 0x42001234\n'*20)
+        self.assertEqual(crash.lines,['Abort at 0x42001234']*12)
+
     def test_wake_settings_validation_and_ack(self):
         board=BoardLink.__new__(BoardLink)
         board.wake_lock=threading.Lock();board.wake_ack=Mock();board.wake_ack.wait.return_value=True

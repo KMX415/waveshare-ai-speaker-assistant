@@ -3,6 +3,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "esp_err.h"
+#include "cJSON.h"
+cJSON *live_voice_failure_status(void);
+cJSON *live_voice_upload_status(void);
 void live_voice_init(void);
 esp_err_t live_voice_start(void);
 void live_voice_stop(void);

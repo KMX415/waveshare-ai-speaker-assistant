@@ -6,6 +6,7 @@ import queue
 import threading
 import asyncio
 import contextlib
+import re
 
 from websockets.asyncio.client import connect
 
@@ -19,9 +20,38 @@ def encode_packet(kind, payload):
     return MAGIC + struct.pack("<BH", kind, len(payload)) + payload
 
 
-class Decoder:
+class CrashCapture:
+    """Retain only recognized panic categories and code addresses, never raw logs."""
     def __init__(self):
+        self.pending = bytearray()
+        self.lines = []
+
+    def feed(self, data):
+        self.pending.extend(data)
+        while b'\n' in self.pending:
+            raw, _, rest = self.pending.partition(b'\n')
+            self.pending = bytearray(rest)
+            line = raw.decode('ascii', errors='replace').strip()
+            safe = None
+            if line.startswith('Backtrace:'):
+                pairs = re.findall(r'0x[0-9a-fA-F]{8}:0x[0-9a-fA-F]{8}', line)
+                if pairs: safe = 'Backtrace: ' + ' '.join(pairs[:32])
+            elif line.startswith('Guru Meditation Error:'):
+                match = re.search(r'\b(LoadProhibited|StoreProhibited|InstrFetchProhibited|IllegalInstruction|LoadStoreAlignment|IntegerDivideByZero|Interrupt wdt timeout|Unhandled debug exception)\b', line)
+                if match: safe = 'Panic: ' + match.group(1)
+            elif line.startswith('abort() was called at PC '):
+                match = re.search(r'PC (0x[0-9a-fA-F]{8})', line)
+                if match: safe = 'Abort at ' + match.group(1)
+            if safe:
+                self.lines.append(safe)
+                self.lines[:] = self.lines[-12:]
+        self.pending[:] = self.pending[-4096:]
+
+
+class Decoder:
+    def __init__(self, discarded=None):
         self.buffer = bytearray()
+        self.discarded = discarded
 
     def feed(self, data):
         self.buffer.extend(data)
@@ -29,9 +59,11 @@ class Decoder:
         while len(self.buffer) >= 5:
             start = self.buffer.find(MAGIC)
             if start < 0:
+                if self.discarded: self.discarded(bytes(self.buffer[:-1]))
                 self.buffer[:] = self.buffer[-1:]
                 break
             if start:
+                if self.discarded: self.discarded(bytes(self.buffer[:start]))
                 del self.buffer[:start]
             if len(self.buffer) < 5:
                 break
@@ -102,6 +134,10 @@ class BoardLink:
         self.volume_ack = threading.Event()
         self.volume_lock = threading.Lock()
         self.native = {}
+        self.failure = {}
+        self.playback = {}
+        self.upload = {}
+        self.crash = CrashCapture()
         self.wake = {}
         self.wake_ack = threading.Event()
         self.wake_lock = threading.Lock()
@@ -133,7 +169,7 @@ class BoardLink:
                 raise RuntimeError("The board did not confirm the volume change.")
 
     def _read(self):
-        decoder = Decoder()
+        decoder = Decoder(self.crash.feed)
         heartbeat = time.monotonic()
         try:
             while not self.closed.is_set():
@@ -158,6 +194,9 @@ class BoardLink:
                             self.native = event
                             self.native_ack.set()
                         elif category == "wake_status": self.wake = event
+                        elif category == "voice_failure": self.failure = event
+                        elif category == "playback_status": self.playback = event
+                        elif category == "upload_status": self.upload = event
                         elif category in ("wake_saved", "wake_error"):
                             self.wake_ok = category == "wake_saved"
                             self.wake_ack.set()
@@ -169,7 +208,11 @@ class BoardLink:
                             self.stop.set()
                 if time.monotonic() - heartbeat > 1:
                     self.command(b"N" if self.info.get("standalone") else (b"P" if self.info else b"I"))
-                    if self.info.get("standalone"): self.command(b"Q")
+                    if self.info.get("standalone"):
+                        self.command(b"Q")
+                        self.command(b"F")
+                        self.command(b"B")
+                        self.command(b"U")
                     heartbeat = time.monotonic()
         except Exception:
             if not self.closed.is_set():

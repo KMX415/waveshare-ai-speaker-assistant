@@ -27,6 +27,9 @@ esp_err_t board_audio_init(void) {
 
     i2s_chan_handle_t tx, rx;
     i2s_chan_config_t channel = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
+    // Match one DMA block to one 20 ms application frame. The default 511-frame
+    // blocks make consecutive 320-frame writes alternate between bursts and waits.
+    channel.dma_frame_num = AUDIO_SAMPLES;
     channel.auto_clear = true;
     ESP_ERROR_CHECK(i2s_new_channel(&channel, &tx, &rx));
     i2s_std_config_t standard = {

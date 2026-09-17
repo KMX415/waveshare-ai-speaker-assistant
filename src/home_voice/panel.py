@@ -33,7 +33,7 @@ class Controller:
             return dict(device=self.board.info,levels=self.board.levels,active=self.busy(),
                         key_set=native.get("key_set",False),key_saved=native.get("key_saved",False),
                         secure_storage=native.get("secure_storage",False),wifi_connected=native.get("wifi_connected",False),
-                        wake=getattr(self.board,"wake",{}),mock=False,message=self.board.error or native.get("message","Waiting for device"),volume=self.board.volume,
+                        wake=getattr(self.board,"wake",{}),failure=getattr(self.board,"failure",{}),playback=getattr(self.board,"playback",{}),upload=getattr(self.board,"upload",{}),crash=list(getattr(getattr(self.board,"crash",None),"lines",[])),mock=False,message=self.board.error or native.get("message","Waiting for device"),volume=self.board.volume,
                         result={"type":"closed","finalized":native.get("finalized",False),"usage":{"seconds":native.get("seconds")}} if native.get("finalized") else {})
         error = self.board.error
         message = self.message

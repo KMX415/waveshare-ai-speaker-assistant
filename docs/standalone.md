@@ -17,12 +17,40 @@ cannot trigger it. Quoting the command can. BOOT is the offline fallback.
 
 Closing waits for final session usage, then returns to local wake listening after a
 three-second cooldown. Limits are 60 seconds inactivity and 10 minutes total.
+Both transcript updates and nonempty output audio reset the idle timer, so a long
+spoken answer does not count as silence. Idle and total-time shutdown reasons remain
+visible in device status after the provider confirms closure.
+The activity clock is initialized before marking a session ready, and idle checks
+allow an activity timestamp to be newer than the loop's sampled time.
 Wi-Fi disconnects schedule a reconnect after five seconds; a failed voice session
 does not automatically open another paid session.
 
 ## Audio and memory
 
-Capture/playback queues are bounded. Queued audio, decoded speaker samples, and response
+Capture/playback queues are bounded.
+Microphone upload combines up to four 16 ms AEC chunks into each WebSocket message,
+reducing TLS/message overhead. A 64-frame PSRAM queue holds about one second of
+capture during brief stalls. If it fills, capture discards the oldest queued audio
+and keeps listening instead of immediately ending the session. This can lose speech
+during congestion; transport/send failures still stop the session. USB `U` and the
+PC status endpoint report dropped audio duration, in-flight upload time, queue depth,
+and Wi-Fi signal strength without exposing network credentials.
+The upload report also includes uptime and the ESP-IDF reset-reason number
+(4: panic, 5/6/7: watchdog, 9: brownout). While PC setup is connected, its status
+retains recognized USB panic categories and backtrace addresses across a device
+restart. It does not retain arbitrary console lines or audio. This capture is
+in PC memory and clears when PC setup restarts; device failure counters clear on boot.
+Upload buffers also live in PSRAM, keeping the networking task stack small.
+Playback now primes with 160 ms of audio (or a 160 ms maximum wait for a short clip),
+with a 640 ms queue capacity to absorb delivery bursts. A final partial PCM frame
+is padded after 240 ms without more data, avoiding premature padding between bursts.
+I2S DMA blocks match the application's 20 ms audio frames for steadier writes.
+Acknowledgment tones pause dequeueing rather than discarding incoming speech.
+The tradeoff is a small extra playback delay. USB `B` reports queue depth/peak and
+short refill gaps, incoming chunk sizes/timing, partial-frame padding, and slow
+speaker writes; ordinary brief pauses can also increment the gap counter.
+
+Queued audio, decoded speaker samples, and response
 messages use PSRAM; queue control structures remain internal. General allocations above
 1 KiB prefer PSRAM, with 64 KiB reserved for internal-only allocations. TLS uses PSRAM.
 
@@ -30,6 +58,10 @@ The wake worker releases its model before TLS startup and reloads after the conv
 The main task uses an 8 KiB stack. WebSocket transmit locking is separate from receive,
 and incoming responses are processed on a worker. LED refresh uses a low-priority RMT DMA
 task; the speaker task only publishes the current audio level.
+The 16-message response queue applies up to 250 ms of backpressure when full,
+allowing its decoder worker to run during network bursts. A sustained backlog still
+ends the session rather than silently dropping speech. Failure records distinguish
+response allocation failure from queue exhaustion and retain queue peak/wait counts.
 
 ## Setup pages
 
@@ -52,6 +84,9 @@ for payload length (maximum 640). Type 1 is a command; type 2 is PCM; type 3 is 
 | I | Firmware identity, audio settings, and device status |
 | N | Connection status, key-present booleans, final usage |
 | D | Audio queue/send timing, transport errors, internal heap |
+| B | Playback buffering, incoming audio timing, and speaker-write counters |
+| U | Upload stalls/loss, Wi-Fi signal, uptime, and reset reason |
+| F | Previous failure message and queue/memory snapshot, retained across retries until reboot |
 | Q | Wake settings, readiness, detection/gap counters |
 | J | Hangup matcher self-tests and spoken hangup counter |
 | L | LED refresh and audio-meter counters |
@@ -63,9 +98,13 @@ for payload length (maximum 640). Type 1 is a command; type 2 is PCM; type 3 is 
 Do not publish raw diagnostic streams: `C` deliberately returns setup credentials.
 Ordinary status commands do not return API keys or transcripts.
 
+The setup pages also show the previous failure separately from the current session
+status. Starting another conversation does not clear it. The snapshot records the
+first failure of each session and lives in RAM, so restarting/power loss clears it.
+
 ## Validation
 
-- 35 host tests cover protocol handling, audio, readiness, authentication, setup guards, and provisioning confirmation.
+- 37 host tests cover protocol handling, audio, readiness, authentication, setup guards, provisioning confirmation, and sanitized crash capture.
 - On-device hangup tests cover fragmented words, punctuation/case, boundaries, and stale data.
 - Three consecutive live sessions connected and finalized after the memory changes.
 - Spoken wake activation, replies, and spoken hangup were confirmed on hardware.

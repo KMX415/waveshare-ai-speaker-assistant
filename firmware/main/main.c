@@ -27,7 +27,12 @@
 #include "esp_log.h"
 
 typedef struct { int16_t samples[AUDIO_SAMPLES]; } audio_frame;
+enum { PLAYBACK_FRAMES=32, PLAYBACK_PREFILL=8, PLAYBACK_WAIT_MS=160 };
 static QueueHandle_t playback;
+static atomic_uint playback_epoch,playback_peak,playback_gaps,last_enqueue_ms;
+static atomic_uint playback_chunks,playback_samples,playback_partial_flushes;
+static atomic_uint playback_chunk_min,playback_chunk_max,playback_arrival_max_ms;
+static atomic_uint playback_writes,playback_write_max_ms,playback_slow_writes;
 static SemaphoreHandle_t tx_lock;
 static atomic_bool streaming;
 static atomic_int tone_frames;
@@ -38,16 +43,25 @@ static size_t queued_samples;
 bool audio_usb_active(void) { return atomic_load(&streaming); }
 void audio_tone(void) { atomic_store(&tone_frames,15); }
 void audio_clear(void) {
-    xSemaphoreTake(playback_lock,portMAX_DELAY);xQueueReset(playback);queued_samples=0;xSemaphoreGive(playback_lock);
+    xSemaphoreTake(playback_lock,portMAX_DELAY);xQueueReset(playback);queued_samples=0;atomic_fetch_add(&playback_epoch,1);xSemaphoreGive(playback_lock);
 }
 bool audio_enqueue(const int16_t *samples,size_t count) {
     bool ok=true;xSemaphoreTake(playback_lock,portMAX_DELAY);
+    unsigned now=(unsigned)(esp_timer_get_time()/1000);
+    unsigned previous=atomic_exchange(&last_enqueue_ms,now);
+    unsigned interval=now-previous;
+    if(previous && interval<1000 && interval>atomic_load(&playback_arrival_max_ms))atomic_store(&playback_arrival_max_ms,interval);
+    atomic_fetch_add(&playback_chunks,1);atomic_fetch_add(&playback_samples,count);
+    if(!atomic_load(&playback_chunk_min)||count<atomic_load(&playback_chunk_min))atomic_store(&playback_chunk_min,count);
+    if(count>atomic_load(&playback_chunk_max))atomic_store(&playback_chunk_max,count);
     while(count) {
         size_t take=AUDIO_SAMPLES-queued_samples;if(take>count)take=count;
         memcpy(queued_frame.samples+queued_samples,samples,take*2);queued_samples+=take;samples+=take;count-=take;
         if(queued_samples==AUDIO_SAMPLES) {
             queued_samples=0;
             if(xQueueSend(playback,&queued_frame,pdMS_TO_TICKS(30))!=pdTRUE){ok=false;break;}
+            unsigned depth=uxQueueMessagesWaiting(playback);
+            if(depth>atomic_load(&playback_peak))atomic_store(&playback_peak,depth);
         }
     }
     xSemaphoreGive(playback_lock);return ok;
@@ -94,14 +108,42 @@ static void device_state(void) {
 static void speaker_task(void *unused) {
     audio_frame frame;
     unsigned phase = 0;
+    unsigned epoch=0,first_wait=0,gap_started=0;bool playing=false;
     for (;;) {
-        if (xQueueReceive(playback, &frame, 0) != pdTRUE) memset(&frame, 0, sizeof(frame));
+        unsigned now=(unsigned)(esp_timer_get_time()/1000),current_epoch=atomic_load(&playback_epoch);
+        if(epoch!=current_epoch){epoch=current_epoch;playing=false;first_wait=0;gap_started=0;}
+        // Flush a final short PCM frame instead of leaving the last syllable stranded.
+        if(xSemaphoreTake(playback_lock,0)==pdTRUE){
+            if(queued_samples && now-atomic_load(&last_enqueue_ms)>=240){
+                memset(queued_frame.samples+queued_samples,0,(AUDIO_SAMPLES-queued_samples)*sizeof(int16_t));
+                if(xQueueSend(playback,&queued_frame,0)==pdTRUE){queued_samples=0;atomic_fetch_add(&playback_partial_flushes,1);}
+            }
+            xSemaphoreGive(playback_lock);
+        }
+        memset(&frame,0,sizeof(frame));
         if (atomic_load(&tone_frames) > 0) {
             for (int i = 0; i < AUDIO_SAMPLES; ++i)
                 frame.samples[i] = (int16_t)(1800 * sinf(2 * 3.14159265f * 440 * phase++ / 16000));
             atomic_fetch_sub(&tone_frames, 1);
+        } else {
+            unsigned depth=uxQueueMessagesWaiting(playback);
+            if(!playing && depth){
+                if(!first_wait)first_wait=now;
+                if(depth>=PLAYBACK_PREFILL || now-first_wait>=PLAYBACK_WAIT_MS){
+                    playing=true;first_wait=0;
+                    // A brief refill gap is a useful symptom, not proof of network loss.
+                    if(gap_started && now-gap_started<=300)atomic_fetch_add(&playback_gaps,1);
+                    gap_started=0;
+                }
+            }
+            if(playing && xQueueReceive(playback,&frame,0)!=pdTRUE){playing=false;gap_started=now;}
         }
+        int64_t write_started=esp_timer_get_time();
         ESP_ERROR_CHECK(board_audio_write(frame.samples));
+        unsigned write_ms=(unsigned)((esp_timer_get_time()-write_started)/1000);
+        atomic_fetch_add(&playback_writes,1);
+        if(write_ms>atomic_load(&playback_write_max_ms))atomic_store(&playback_write_max_ms,write_ms);
+        if(write_ms>40)atomic_fetch_add(&playback_slow_writes,1);
         activity_leds_audio(frame.samples,AUDIO_SAMPLES);
     }
 }
@@ -162,9 +204,9 @@ void app_main(void) {
     ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&usb));
     tx_lock = xSemaphoreCreateMutex();
     static StaticQueue_t playback_control;
-    uint8_t *playback_storage=heap_caps_malloc(12*sizeof(audio_frame),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    uint8_t *playback_storage=heap_caps_malloc(PLAYBACK_FRAMES*sizeof(audio_frame),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
     configASSERT(playback_storage);
-    playback = xQueueCreateStatic(12,sizeof(audio_frame),playback_storage,&playback_control);
+    playback = xQueueCreateStatic(PLAYBACK_FRAMES,sizeof(audio_frame),playback_storage,&playback_control);
     playback_lock=xSemaphoreCreateMutex();
     configASSERT(tx_lock && playback && playback_lock);
     ESP_ERROR_CHECK(board_audio_init());
@@ -209,6 +251,11 @@ void app_main(void) {
                 status(report);break;
             }
             case 'N': device_state();break;
+            case 'U': {cJSON *j=live_voice_upload_status();char *s=cJSON_PrintUnformatted(j);if(s){status(s);free(s);}cJSON_Delete(j);break;}
+            case 'B': {
+                char report[640];snprintf(report,sizeof(report),"{\"type\":\"playback_status\",\"queued_frames\":%u,\"peak_frames\":%u,\"short_refill_gaps\":%u,\"prefill_ms\":%u,\"capacity_ms\":640,\"chunks\":%u,\"samples\":%u,\"chunk_min\":%u,\"chunk_max\":%u,\"arrival_max_ms\":%u,\"partial_flushes\":%u,\"writes\":%u,\"write_max_ms\":%u,\"slow_writes\":%u}",(unsigned)uxQueueMessagesWaiting(playback),atomic_load(&playback_peak),atomic_load(&playback_gaps),PLAYBACK_WAIT_MS,atomic_load(&playback_chunks),atomic_load(&playback_samples),atomic_load(&playback_chunk_min),atomic_load(&playback_chunk_max),atomic_load(&playback_arrival_max_ms),atomic_load(&playback_partial_flushes),atomic_load(&playback_writes),atomic_load(&playback_write_max_ms),atomic_load(&playback_slow_writes));status(report);break;
+            }
+            case 'F': {cJSON *j=live_voice_failure_status();char *s=cJSON_PrintUnformatted(j);if(s){status(s);free(s);}cJSON_Delete(j);break;}
             case 'J': {
                 char report[120];snprintf(report,sizeof(report),"{\"type\":\"hangup_status\",\"selftest\":%s,\"hangups\":%u}",hangup_phrase_selftest()?"true":"false",live_voice_hangups());
                 status(report);break;

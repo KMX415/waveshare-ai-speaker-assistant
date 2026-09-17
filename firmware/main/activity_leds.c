@@ -42,6 +42,8 @@ static void worker(void *unused) {
     static rmt_symbol_word_t symbols[SYMBOL_COUNT];
     rmt_transmit_config_t tx={0};
     float envelope=0;
+    bool was_idle_failed=false;
+    uint32_t error_started=0;
     for(;;) {
         unsigned peak=atomic_exchange(&audio_peak,0);
         if(setup_portal_volume()==0)peak=0;
@@ -52,6 +54,12 @@ static void worker(void *unused) {
         bool waking=until && (int32_t)(until-now)>0;
         bool active=live_voice_active(), listening=live_voice_ready();
         bool armed=wake_word_listening();
+        bool idle_failed=!active && live_voice_failed();
+        if(idle_failed && !was_idle_failed)error_started=now;
+        was_idle_failed=idle_failed;
+        // A retained failure is history, not an ongoing busy state. Give it a
+        // brief indication, then show wake readiness without clearing diagnostics.
+        bool show_error=idle_failed && (uint32_t)(now-error_started)<3000;
         for(unsigned i=0;i<LED_COUNT;i++) {
             uint8_t r=0,g=0,b=0;
             if(waking) {g=45;}
@@ -61,7 +69,7 @@ static void worker(void *unused) {
             } else if(active && !listening) {
                 if(i==(now/140)%LED_COUNT){r=35;g=14;}
             } else if(active) {g=8;b=12;}
-            else if(live_voice_failed()) {if((now/500)%2==0)r=20;}
+            else if(show_error) {if(((now-error_started)/500)%2==0)r=20;}
             else if(armed && i==0) {g=2;b=3;}
             uint8_t rgb[]={r,g,b};
             for(unsigned byte=0;byte<3;byte++)for(unsigned bit=0;bit<8;bit++) {

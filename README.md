@@ -71,7 +71,7 @@ Say the wake word, wait for the ready tone, then speak. “Goodbye, Jarvis” re
 | 🟠 Moving amber | Connecting or closing |
 | 🩵 Cyan ring | Live conversation is listening |
 | 🔵 Blue level meter | Speaker playback; brightness and length follow the audio |
-| 🔴 Blinking red | Conversation error; check the setup page |
+| 🔴 Blinking red for 3 seconds | Conversation error, then back to idle; check the setup page |
 
 **BOOT:** short press starts/stops. Hold at least 2.5 seconds and release to reopen Wi-Fi setup. Holding BOOT while powering on enters download mode instead.
 

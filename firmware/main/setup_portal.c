@@ -159,6 +159,7 @@ static esp_err_t handle(httpd_req_t *r) {
         cJSON_AddBoolToObject(body,"finalized",live_voice_finalized());
         cJSON_AddNumberToObject(body,"usage_seconds",live_voice_usage_seconds());
         cJSON_AddItemToObject(body,"wake",wake_word_status());
+        cJSON_AddItemToObject(body,"failure",live_voice_failure_status());
     } else if (!strcmp(r->uri,"/api/scan")) {
         if (esp_wifi_scan_start(NULL,true) != ESP_OK) { cJSON_Delete(body); return error(r,"Scan unavailable while connecting. Try again shortly."); }
         wifi_ap_record_t records[24]; uint16_t count = 24;

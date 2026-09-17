@@ -148,7 +148,7 @@ A blank key field after saving is normal: the page does not retrieve and display
 | Moving amber | Connecting or closing |
 | Cyan ring | Connected and listening |
 | Blue meter | Speaker audio is playing |
-| Blinking red | An error occurred; read the status message |
+| Blinking red for 3 seconds | A conversation failed; then the ring returns to idle. Read the retained status message. |
 
 If you only want to test wake detection, use **Test detection for 60 seconds**. It plays a local tone without starting paid conversations. End the test or wait for it to expire before trying live voice.
 
