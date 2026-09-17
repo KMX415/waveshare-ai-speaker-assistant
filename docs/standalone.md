@@ -32,6 +32,12 @@ revealing network names or access-point addresses. This is not continuous roamin
 Wi-Fi saved through setup uses the SDK's all-channel, strongest-signal preference.
 Voice sockets retain the SDK's connection-time socket timeouts; the separate
 WebSocket send timeout is not an end-to-end deadline for shutdown.
+The external WebSocket transport forwards control frames to the client, matching
+the SDK's internal transport configuration. Otherwise PONG replies are consumed
+below the client and its 120-second heartbeat watchdog can end a healthy session
+about 130 seconds after connection. USB upload diagnostics count received PONGs.
+TCP/TLS error numbers are read only for TCP errors; the SDK leaves those fields
+uninitialized for heartbeat timeouts and other non-TCP events.
 
 ## Audio and memory
 

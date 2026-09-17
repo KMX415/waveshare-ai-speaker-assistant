@@ -39,6 +39,7 @@ static QueueHandle_t inputs;
 static QueueHandle_t responses;
 static QueueHandle_t tool_calls;
 static atomic_uint searches,functions,backend_errors;
+static atomic_uint pong_count;
 static SemaphoreHandle_t responses_idle;
 static atomic_bool busy, ready, stopping, connected, finalized, failed;
 static atomic_uint activity_ms;
@@ -76,6 +77,7 @@ cJSON *live_voice_upload_status(void){
     cJSON_AddNumberToObject(j,"searches",atomic_load(&searches));
     cJSON_AddNumberToObject(j,"functions",atomic_load(&functions));
     cJSON_AddNumberToObject(j,"backend_errors",atomic_load(&backend_errors));
+    cJSON_AddNumberToObject(j,"pongs",atomic_load(&pong_count));
     if(esp_wifi_sta_get_ap_info(&ap)==ESP_OK)cJSON_AddNumberToObject(j,"wifi_rssi",ap.rssi);
     return j;
 }
@@ -187,8 +189,11 @@ static void websocket_event(void *arg,esp_event_base_t base,int32_t id,void *raw
     if(id==WEBSOCKET_EVENT_ERROR || id==WEBSOCKET_EVENT_DISCONNECTED || id==WEBSOCKET_EVENT_CLOSED){
         transport_event=id;transport_error_type=event->error_handle.error_type;
         if(event->close_status_code)close_code=event->close_status_code;
-        if(event->error_handle.esp_transport_sock_errno)socket_error=event->error_handle.esp_transport_sock_errno;
-        if(event->error_handle.esp_tls_stack_err)tls_error=event->error_handle.esp_tls_stack_err;
+        // The SDK initializes these fields only for TCP transport errors.
+        if(event->error_handle.error_type==WEBSOCKET_ERROR_TYPE_TCP_TRANSPORT){
+            socket_error=event->error_handle.esp_transport_sock_errno;
+            tls_error=event->error_handle.esp_tls_stack_err;
+        }
         // The SDK can report the close code after its initial error callback.
         // Enrich the same failure without changing its original message/count.
         if(atomic_load(&failed)){
@@ -215,9 +220,11 @@ static void websocket_event(void *arg,esp_event_base_t base,int32_t id,void *raw
         atomic_store(&connected,true);return;
     }
     if(id==WEBSOCKET_EVENT_ERROR || id==WEBSOCKET_EVENT_DISCONNECTED || id==WEBSOCKET_EVENT_CLOSED) {
-        if(!atomic_load(&stopping)) fail("Voice connection ended; press to reconnect");
+        if(!atomic_load(&stopping)) fail(event->error_handle.error_type==WEBSOCKET_ERROR_TYPE_PONG_TIMEOUT?
+            "Voice heartbeat timed out; press to reconnect":"Voice connection ended; press to reconnect");
         atomic_store(&connected,false);return;
     }
+    if(id==WEBSOCKET_EVENT_DATA && event->op_code==WS_TRANSPORT_OPCODES_PONG)atomic_fetch_add(&pong_count,1);
     if(id!=WEBSOCKET_EVENT_DATA || (event->op_code!=1 && event->op_code!=0)) return;
     if(event->payload_offset==0 && event->op_code==1) {message_used=0;message_opcode=1;}
     if(message_opcode!=1 || event->data_len<0 || message_used+event->data_len>=MESSAGE_MAX) {fail("Voice response exceeds buffer");return;}
@@ -300,7 +307,7 @@ static void session_task(void *unused) {
     input_frames_sent=0;max_send_ms=0;input_queue_peak=0;
     input_samples_dropped=0;upload_started_ms=0;
     response_queue_peak=0;response_queue_waits=0;
-    searches=0;functions=0;backend_errors=0;delegation_reset();
+    searches=0;functions=0;backend_errors=0;pong_count=0;delegation_reset();
     socket_error=0;tls_error=0;close_code=0;transport_event=0;transport_error_type=0;
     session_started_ms=(unsigned)(esp_timer_get_time()/1000);
     if(!wake_word_pause_for_voice()){fail("Wake detector did not release audio resources");goto cleanup;}
@@ -324,8 +331,10 @@ static void session_task(void *unused) {
     tls=esp_transport_ssl_init();
     if(tls) {esp_transport_ssl_crt_bundle_attach(tls,esp_crt_bundle_attach);ws=esp_transport_ws_init(tls);}
     if(!ws){fail("Could not allocate voice transport");goto cleanup;}
-    esp_transport_ws_set_path(ws,"/v1/live/sessions");
-    if(esp_transport_ws_set_headers(ws,headers)!=ESP_OK){fail("Could not configure voice transport");goto cleanup;}
+    // External transports bypass the client's normal transport configuration.
+    // Forward PONG/CLOSE frames so its heartbeat and close handling can see them.
+    const esp_transport_ws_config_t ws_config={.ws_path="/v1/live/sessions",.headers=headers,.propagate_control_frames=true};
+    if(esp_transport_ws_set_config(ws,&ws_config)!=ESP_OK){fail("Could not configure voice transport");goto cleanup;}
     esp_websocket_client_config_t config={.uri="wss://api.openai.com/v1/live/sessions",.port=443,.headers=headers,
         .crt_bundle_attach=esp_crt_bundle_attach,.disable_auto_reconnect=true,.buffer_size=4096,
         .task_stack=12288,.network_timeout_ms=5000,.ext_transport=ws};
