@@ -220,6 +220,8 @@ static esp_err_t handle(httpd_req_t *r) {
             if(!cJSON_IsString(s)||strlen(s->valuestring)<1||strlen(s->valuestring)>32||!cJSON_IsString(p)||strlen(p->valuestring)>63) result=ESP_ERR_INVALID_ARG;
             else {
                 wifi_config_t config={0};
+                config.sta.scan_method=WIFI_ALL_CHANNEL_SCAN;
+                config.sta.sort_method=WIFI_CONNECT_AP_BY_SIGNAL;
                 char password[64]; load_string("wifi_password",password,sizeof(password));
                 if(cJSON_IsTrue(o)) password[0]=0;
                 else if(p->valuestring[0]) strlcpy(password,p->valuestring,sizeof(password));
@@ -284,6 +286,8 @@ void setup_portal_init(void) {
     if(!saved_ssid[0]) setup_portal_enable();
     else {
         wifi_config_t config={0}; char password[64]; load_string("wifi_password",password,sizeof(password));
+        config.sta.scan_method=WIFI_ALL_CHANNEL_SCAN;
+        config.sta.sort_method=WIFI_CONNECT_AP_BY_SIGNAL;
         memcpy(config.sta.ssid,saved_ssid,strlen(saved_ssid)); memcpy(config.sta.password,password,strlen(password));
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA,&config)); esp_wifi_connect(); memset(password,0,sizeof(password));
     }

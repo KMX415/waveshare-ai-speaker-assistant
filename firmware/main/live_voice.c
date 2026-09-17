@@ -167,7 +167,12 @@ static void websocket_event(void *arg,esp_event_base_t base,int32_t id,void *raw
     }
     if(id==WEBSOCKET_EVENT_CONNECTED) {
         int fd=esp_transport_get_socket((esp_transport_handle_t)arg), enabled=1;
-        if(fd<0 || setsockopt(fd,IPPROTO_TCP,TCP_NODELAY,&enabled,sizeof(enabled))!=0) {
+        // The WebSocket timeout covers polling/locks, not every underlying TLS
+        // socket operation. Bound blocking reads and writes separately as well.
+        struct timeval socket_timeout={.tv_sec=1,.tv_usec=0};
+        if(fd<0 || setsockopt(fd,IPPROTO_TCP,TCP_NODELAY,&enabled,sizeof(enabled))!=0 ||
+           setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&socket_timeout,sizeof(socket_timeout))!=0 ||
+           setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&socket_timeout,sizeof(socket_timeout))!=0) {
             fail("Could not configure voice socket");return;
         }
         atomic_store(&connected,true);return;

@@ -24,6 +24,12 @@ The activity clock is initialized before marking a session ready, and idle check
 allow an activity timestamp to be newer than the loop's sampled time.
 Wi-Fi disconnects schedule a reconnect after five seconds; a failed voice session
 does not automatically open another paid session.
+Wi-Fi connections scan all channels and prefer the strongest matching access point,
+including when multiple mesh nodes advertise the saved network name. This chooses
+an access point on connection; it does not implement continuous roaming.
+Connected voice sockets use one-second send/receive timeouts in addition to the
+WebSocket send timeout. These bound individual blocking socket operations, not the
+entire connection shutdown sequence.
 
 ## Audio and memory
 
