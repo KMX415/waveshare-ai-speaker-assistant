@@ -21,7 +21,7 @@ A standalone, Wi-Fi voice assistant with local wake words and a ring of light th
 
 </div>
 
-Multiroom development for Kitchen, Living Room, and Bedroom is tracked in the [implementation plan](docs/multiroom-plan.md). The experimental [signed Wi-Fi update preview](docs/wifi-updates.md) passed installation and reboot checks on Kitchen while preserving its saved settings. Coordinated wake words and intercom are still in development; the stable release is unchanged.
+Multiroom development for user-configured households is tracked in the [implementation plan](docs/multiroom-plan.md). The experimental [signed Wi-Fi update preview](docs/wifi-updates.md) passed installation and reboot checks on a test speaker while preserving its saved settings. Coordinated wake words and intercom are still in development; the stable release is unchanged.
 
 ---
 

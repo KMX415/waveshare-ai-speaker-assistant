@@ -5,7 +5,7 @@ The speaker runs from a USB power adapter and home Wi-Fi. A computer is only nee
 1. Hold BOOT for about three seconds, then release to open setup Wi-Fi.
 2. Connect your phone to the speaker's saved HomeVoice setup network. Open **http://192.168.4.1**. Stay connected if the phone warns that this network has no internet.
 3. In **Your assistant**, enter a town/city and country, choose Fahrenheit or Celsius, and leave **Live web search and weather** enabled. An existing postal code is a fallback; the assistant should ask when the location is ambiguous.
-4. Write a short purpose or style, such as “A friendly kitchen assistant. Help with cooking, weather and everyday questions. Keep answers under three sentences unless I ask for more.”
+4. Write a short purpose or style, such as “A friendly home assistant. Help with cooking, weather and everyday questions. Keep answers under three sentences unless I ask for more.”
 5. Save while no conversation is active. Your settings remain after power loss and take effect at the next wake-up.
 6. Say your wake phrase, wait for the ready tone, and ask a question.
 
@@ -32,7 +32,7 @@ Speaker volume uses the existing device scale **0–80**. Voice changes are vali
 
 ## Spoken microphone setup
 
-Say **“Jarvis, calibrate your microphone.”** The assistant asks you to stay quiet for a room-noise sample, then speak normally from your usual kitchen position, then repeat the phrase to verify its trial adjustment. Follow the spoken prompts; there is no page to operate. Keep the distance and appliance noise representative of normal use.
+Say **“Jarvis, calibrate your microphone.”** The assistant asks you to stay quiet for a room-noise sample, then speak normally from your usual speaking position, then repeat the phrase to verify its trial adjustment. Follow the spoken prompts; there is no page to operate. Keep the distance and appliance noise representative of normal use.
 
 The board measures raw mic headroom and echo-cancelled speech/noise levels, excluding its own playback. It requires enough detected speech, roughly a 10 dB speech-to-noise margin, and an unclipped verification sample. It changes hardware gain by at most 6 dB per attempt, bounded to supported 0–36 dB settings. These are conservative engineering thresholds, not a guarantee of speech recognition at every distance.
 

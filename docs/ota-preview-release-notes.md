@@ -12,9 +12,9 @@ Changes:
 - Spoken firmware status/update requests and room naming.
 - Fix GitHub asset redirects whose request URLs exceed the HTTP client's default transmit buffer; wait for a Wi-Fi address before checking and report HTTP diagnostics.
 
-Validation before publication: 44 host tests passed; migration on the Kitchen speaker preserved its encrypted API key and preferences; hardware signature checks passed; live conversation/tool checks and actual reboot persistence passed. An unavailable release check exited safely.
+Validation before publication: 44 host tests passed; migration on the test speaker preserved its encrypted API key and preferences; hardware signature checks passed; live conversation/tool checks and actual reboot persistence passed. An unavailable release check exited safely.
 
-Hardware result after publication: Kitchen downloaded release 702 over Wi-Fi, booted it, completed local health acceptance and retained the new release through a second reboot. Its room identity, encrypted-key availability, voice and microphone preferences were preserved.
+Hardware result after publication: The test speaker downloaded release 702 over Wi-Fi, booted it, completed local health acceptance and retained the new release through a second reboot. Its room identity, encrypted-key availability, voice and microphone preferences were preserved.
 
 Power-cut and failed-boot rollback tests, cross-speaker pairing, wake arbitration, intercom, shared memory, handoff and household update scheduling are **not yet validated or released**.
 

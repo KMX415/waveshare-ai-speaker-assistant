@@ -1,8 +1,10 @@
 # Multiroom implementation plan
 
-Three speakers, each operating on USB wall power and home Wi-Fi. No PC, MQTT broker, Home Assistant installation, or always-on hub is required. Each speaker continues ordinary conversations if its peers are offline.
+One or more speakers, each operating on USB wall power and home Wi-Fi. No PC, MQTT broker, Home Assistant installation, or always-on hub is required. Each speaker continues ordinary conversations if its peers are offline.
 
-The devices are **Kitchen** (the original board), **Living Room**, and **Bedroom**. All three have arrived. Kitchen and Living Room have overlapping acoustic coverage and are the primary wake-arbitration test pair.
+Room labels and household membership are user configuration. Do not hardcode room names, wake-group names, or a three-device topology in firmware, tools, setup defaults, or routing. Use stable device IDs for routing and editable labels for display. Any resource-based peer limit must be explicit and documented; a three-device test setup does not define the product limit.
+
+Validation should include two speakers with overlapping acoustic coverage and a speaker in a separate wake group. Actual room labels and group membership are chosen during setup and may change without rebuilding firmware.
 
 Transport, privacy, replay protection and wake-group contracts are recorded in [household protocol design](household-protocol.md). That protocol is design work until its implementation and physical tests are checked off below.
 
@@ -51,16 +53,16 @@ Initial management is from speakers or an authenticated controller on the home L
 
 - [x] Requirements and delivery sequence recorded.
 - [x] Signed manifest tooling, rejection tests, and non-overlapping OTA partition layout added.
-- [x] Kitchen settings/credential partitions backed up locally; real reboot persistence test passed.
+- [x] Test-speaker settings/credential partitions backed up locally; real reboot persistence test passed.
 - [x] OTA-enabled firmware compiled, with exclusive update/audio ownership and local boot checks.
 - [ ] Phase 1 implementation and local tests.
-- [x] USB migration of the Kitchen speaker; encrypted key, voice and microphone preferences retained. On-device signed-manifest checks passed; live voice/tool tests and a real reboot passed.
+- [x] USB migration of the test speaker; encrypted key, voice and microphone preferences retained. On-device signed-manifest checks passed; live voice/tool tests and a real reboot passed.
 - [ ] Signed OTA and rollback exercised on hardware.
-- [x] Kitchen installed signed release 702 over Wi-Fi; boot health acceptance and a second reboot passed, retaining room identity, encrypted-key availability and audio preferences. Interrupted-download and failed-boot recovery remain open.
+- [x] The test speaker installed signed release 702 over Wi-Fi; boot health acceptance and a second reboot passed, retaining room identity, encrypted-key availability and audio preferences. Interrupted-download and failed-boot recovery remain open.
 - [ ] Phase 2 implementation and local tests.
 - [ ] Two-device pairing/discovery validation.
 - [ ] Phases 3–7 implementation and simulation tests.
 - [ ] Real multiroom acoustic tests on at least two devices.
-- [ ] Three-room soak test, reconnect/power-cycle tests, and documentation.
+- [ ] Multiroom soak test, reconnect/power-cycle tests, and documentation.
 
 Software/simulation checks and physical-device checks are separate gates. Do not mark a feature verified from a successful build alone. New physical speakers may be required for the remaining gates; continue independent implementation while they are unavailable.

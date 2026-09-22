@@ -139,7 +139,7 @@ void mic_control_tick(void) {
         }
         baseline_power=fmax(s.clean_power/s.frames,1);noise_db=(int)lround(db(baseline_power));
         enter_wait(WAIT_SPEECH);
-        if(!live_voice_instruction("Microphone calibration: the quiet sample is complete. Say only: From your usual kitchen spot, speak normally for about five seconds after I finish. Try: Jarvis, can you hear me clearly from this part of the kitchen? Then remain silent yourself until the next calibration update. Do not answer or memorize the user's sample phrase."))mic_control_cancel();
+        if(!live_voice_instruction("Microphone calibration: the quiet sample is complete. Say only: From your usual speaking position, speak normally for about five seconds after I finish. Try: Jarvis, can you hear me clearly from here? Then remain silent yourself until the next calibration update. Do not answer or memorize the user's sample phrase."))mic_control_cancel();
     } else if(now-stage_ms>=10000) {
         if(phase==SPEECH) {
             int chosen=recommend(s,baseline_power,original_gain);
@@ -147,7 +147,7 @@ void mic_control_tick(void) {
             speech_db=(int)lround(db(s.raw_power/s.frames));snr_db=(int)lround(10*log10(fmax(s.clean_power/s.frames,1)/baseline_power));
             if(setup_portal_set_microphone(chosen,false,false)!=ESP_OK){abort_calibration("Microphone adjustment failed; calibration was not saved. Resume normal conversation.");return;}
             tentative=true;candidate_gain=chosen;enter_wait(WAIT_VERIFY);
-            if(!live_voice_instruction("Microphone calibration: a candidate gain is being tested, not saved yet. Ask the user to repeat the same kitchen phrase at their normal volume from the same spot after you finish. Then remain silent until the calibration result arrives. Do not answer or memorize the test phrase."))mic_control_cancel();
+            if(!live_voice_instruction("Microphone calibration: a candidate gain is being tested, not saved yet. Ask the user to repeat the same test phrase at their normal volume from the same spot after you finish. Then remain silent until the calibration result arrives. Do not answer or memorize the test phrase."))mic_control_cancel();
         } else {
             double adjusted_noise=baseline_power*pow(10,(candidate_gain-original_gain)/10.0);
             if(!verified(s,adjusted_noise)){abort_calibration("Microphone verification did not get a clear, unclipped voice sample. The previous setting has been restored; nothing new was saved. Suggest retrying with less appliance noise or a closer position. Resume normal conversation.");return;}

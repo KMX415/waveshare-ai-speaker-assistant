@@ -1,6 +1,6 @@
 # Wi-Fi updates (in development)
 
-The multiroom branch introduces signed application updates. The [0.7.0-dev3 preview](https://github.com/KMX415/waveshare-ai-speaker-assistant/releases/tag/v0.7.0-dev3) passed a real Wi-Fi install on Kitchen, including startup validation and a second reboot. It remains experimental: interrupted-download and failed-boot recovery tests are still required before household rollout. The stable release remains unchanged.
+The multiroom branch introduces signed application updates. The [0.7.0-dev3 preview](https://github.com/KMX415/waveshare-ai-speaker-assistant/releases/tag/v0.7.0-dev3) passed a real Wi-Fi install on a test speaker, including startup validation and a second reboot. It remains experimental: interrupted-download and failed-boot recovery tests are still required before household rollout. The stable release remains unchanged.
 
 ## One-time migration
 
@@ -32,7 +32,7 @@ USB `u` reads update status; `u` followed by byte 1 queues a check, and byte 2 q
 
 - Host tests verify signature rejection, corruption/truncation, replay/downgrade rejection, compatibility fields, and data-partition preservation.
 - Firmware compilation and hardware migration/rollback are separate validation gates.
-- Kitchen completed USB migration, an HTTPS download of release 702 into the inactive slot, local boot validation, and a second reboot. Room identity, encrypted-key availability, selected voice, automatic-memory preference and microphone settings were preserved.
+- A test speaker completed USB migration, an HTTPS download of release 702 into the inactive slot, local boot validation, and a second reboot. Room identity, encrypted-key availability, selected voice, automatic-memory preference and microphone settings were preserved.
 - The preview channel manifest is hosted under the `ota-preview` release; its image URL points to an immutable versioned prerelease. USB `u` followed by byte 4 checks this channel; byte 5 installs it. Stable voice update commands do not select previews.
 - Run `python scripts/check_wifi_update.py --port COM14 --expected-release 702` only on an identified, idle, migrated speaker running an older release. USB carries status and control; firmware bytes are fetched by the speaker over Wi-Fi.
 - Multi-speaker update scheduling and management outside the home are tracked in [the multiroom plan](multiroom-plan.md).

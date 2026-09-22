@@ -2,9 +2,9 @@
 
 This document fixes the remaining integration contracts before transport code is added. It is not a claim that discovery or intercom is already working.
 
-## Initial household
+## Household configuration
 
-Kitchen and Living Room share the `common-area` wake group. Bedroom has its own wake group. Arbitration is scoped to a wake group, not the whole house: two independent calls in Bedroom and Kitchen should both work. BOOT remains a deliberate local override. Each speaker has a stable hardware ID and a separately editable room label; duplicate labels must be reported as ambiguous rather than silently routed.
+Users choose room labels and which speakers share a wake group according to acoustic overlap. No room names, group names, or three-speaker membership list are built in. Group membership must be configurable without rebuilding firmware. Arbitration is scoped to a wake group: independent calls in separate groups should both work. BOOT remains a deliberate local override. Each speaker has a stable hardware ID and a separately editable room label; duplicate labels must be reported as ambiguous rather than silently routed.
 
 ## Pairing and transport
 
@@ -16,7 +16,7 @@ Start with bounded local messages, not continuous audio streaming. Local discove
 
 ## Wake arbitration
 
-Capture a short wake-audio measurement before automatic digital gain, normalize for hardware gain, and compare only recent candidates in the same wake group. Allow a small bounded collection window and deterministic ID tie-breaking. Repeated/reordered packets must not start additional paid sessions. Bound suppression time so a lost peer cannot indefinitely prevent a local wake. The actual selection window and score require Kitchen/Living Room acoustic testing; microphone loudness alone is not guaranteed to identify the nearest person.
+Capture a short wake-audio measurement before automatic digital gain, normalize for hardware gain, and compare only recent candidates in the same wake group. Allow a small bounded collection window and deterministic ID tie-breaking. Repeated/reordered packets must not start additional paid sessions. Bound suppression time so a lost peer cannot indefinitely prevent a local wake. The actual selection window and score require acoustic testing with overlapping speakers; microphone loudness alone is not guaranteed to identify the nearest person.
 
 ## Message operations
 
@@ -44,4 +44,4 @@ Existing local memories are not automatically copied to other speakers. Users ex
 
 ## Testing gates
 
-Simulate loss, duplicates, reordering, delayed acknowledgements, receiver and sender restart, expired messages, unauthorized senders and overlapping wake candidates. Then test on two physical speakers, followed by all three rooms. Test announcements with the destination microphone monitored locally to prove no input is uploaded. Run a longer conversation during peer discovery to check RAM, upload latency and audio continuity before enabling household transport by default.
+Simulate loss, duplicates, reordering, delayed acknowledgements, receiver and sender restart, expired messages, unauthorized senders and overlapping wake candidates. Then test on two physical speakers, followed by a larger configured household. Test announcements with the destination microphone monitored locally to prove no input is uploaded. Run a longer conversation during peer discovery to check RAM, upload latency and audio continuity before enabling household transport by default.
