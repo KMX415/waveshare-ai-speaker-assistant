@@ -56,6 +56,7 @@ Initial management is from speakers or an authenticated controller on the home L
 - [ ] Phase 1 implementation and local tests.
 - [x] USB migration of the Kitchen speaker; encrypted key, voice and microphone preferences retained. On-device signed-manifest checks passed; live voice/tool tests and a real reboot passed.
 - [ ] Signed OTA and rollback exercised on hardware.
+- [x] Kitchen installed signed release 702 over Wi-Fi; boot health acceptance and a second reboot passed, retaining room identity, encrypted-key availability and audio preferences. Interrupted-download and failed-boot recovery remain open.
 - [ ] Phase 2 implementation and local tests.
 - [ ] Two-device pairing/discovery validation.
 - [ ] Phases 3–7 implementation and simulation tests.
