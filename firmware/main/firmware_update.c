@@ -12,6 +12,7 @@
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "esp_system.h"
+#include "esp_netif.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -31,6 +32,7 @@ static SemaphoreHandle_t mutex;
 static atomic_int requested; // 0 none, 1 check, 2 install
 static atomic_bool running;
 static atomic_bool service_ready;
+static atomic_int last_http_status,last_http_error,last_redirects;
 static char state[96]="Not checked", available_version[32];
 static unsigned available_release;
 
@@ -78,20 +80,36 @@ done:
 }
 // Explicit redirect handling keeps HTTPS mandatory even after GitHub redirects.
 static esp_http_client_handle_t open_https(const char *url) {
-    esp_http_client_config_t cfg={.url=url,.crt_bundle_attach=esp_crt_bundle_attach,.timeout_ms=15000,.buffer_size=2048,.disable_auto_redirect=true};
+    last_http_status=0;last_http_error=0;last_redirects=0;
+    // GitHub asset redirects contain long signed query strings; the default
+    // 512-byte transmit buffer cannot hold their HTTP request line.
+    esp_http_client_config_t cfg={.url=url,.crt_bundle_attach=esp_crt_bundle_attach,.timeout_ms=15000,.buffer_size=2048,.buffer_size_tx=4096,.disable_auto_redirect=true};
     esp_http_client_handle_t h=esp_http_client_init(&cfg);if(!h)return NULL;
     for(int i=0;i<5;i++) {
-        if(esp_http_client_get_transport_type(h)!=HTTP_TRANSPORT_OVER_SSL||esp_http_client_open(h,0)!=ESP_OK)break;
-        if(esp_http_client_fetch_headers(h)<0)break;
+        if(esp_http_client_get_transport_type(h)!=HTTP_TRANSPORT_OVER_SSL){last_http_error=ESP_ERR_INVALID_ARG;break;}
+        esp_err_t opened=esp_http_client_open(h,0);
+        if(opened!=ESP_OK){last_http_error=opened;break;}
+        int64_t length=esp_http_client_fetch_headers(h);
+        if(length<0){last_http_error=(int)length;break;}
         int code=esp_http_client_get_status_code(h);
+        last_http_status=code;
         if(code==200)return h;
         esp_http_client_close(h);
         if(code!=301&&code!=302&&code!=303&&code!=307&&code!=308)break;
-        if(esp_http_client_set_redirection(h)!=ESP_OK)break;
+        esp_err_t redirected=esp_http_client_set_redirection(h);
+        if(redirected!=ESP_OK){last_http_error=redirected;break;}
+        last_redirects=i+1;
     }
     esp_http_client_cleanup(h);return NULL;
 }
 static bool fetch_manifest(candidate *out,bool preview) {
+    esp_netif_t *station=esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t ip={0};
+    for(int i=0;i<100;i++) {
+        if(station&&esp_netif_get_ip_info(station,&ip)==ESP_OK&&ip.ip.addr)break;
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    if(!ip.ip.addr){message("Wi-Fi is not connected; retry later");return false;}
     if(!esp_sntp_enabled()){esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);esp_sntp_setservername(0,"pool.ntp.org");esp_sntp_init();}
     for(int i=0;i<100&&time(NULL)<1700000000;i++)vTaskDelay(pdMS_TO_TICKS(100));
     if(time(NULL)<1700000000){message("Clock synchronization unavailable; retry later");return false;}
@@ -197,6 +215,7 @@ esp_err_t firmware_update_preview(bool install_update){return request(install_up
 cJSON *firmware_update_status(void) {
     cJSON *j=cJSON_CreateObject();cJSON_AddStringToObject(j,"type","update_status");
     cJSON_AddStringToObject(j,"version",HOME_VOICE_VERSION);cJSON_AddNumberToObject(j,"release",HOME_VOICE_RELEASE);
+    cJSON_AddNumberToObject(j,"http_status",last_http_status);cJSON_AddNumberToObject(j,"http_error",last_http_error);cJSON_AddNumberToObject(j,"redirects",last_redirects);
     cJSON_AddBoolToObject(j,"supported",ota_layout());cJSON_AddBoolToObject(j,"busy",atomic_load(&running)||runtime_updating());cJSON_AddBoolToObject(j,"queued",atomic_load(&requested)!=0);
     if(mutex){xSemaphoreTake(mutex,portMAX_DELAY);cJSON_AddStringToObject(j,"state",state);cJSON_AddStringToObject(j,"available_version",available_version);cJSON_AddNumberToObject(j,"available_release",available_release);xSemaphoreGive(mutex);}return j;
 }
