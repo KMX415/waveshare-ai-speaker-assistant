@@ -1,0 +1,3 @@
+#pragma once
+// Signed parser fixture only: release 1 is older than production; never installed.
+static const char update_test_fixture[] = "{\"payload\":\"eyJib2FyZCI6IndhdmVzaGFyZS1lc3AzMi1zMy1hdWRpbyIsImxheW91dCI6MSwiYXNzZXRzIjoiZXNwLXNyLTIuMS41LXduOS1qYXJ2aXMtY29tcHV0ZXIiLCJyZWxlYXNlIjoxLCJ2ZXJzaW9uIjoic2VsZnRlc3QiLCJzaXplIjoxMjgsInNoYTI1NiI6IjA2ZDAxODc2MThhYjA2ODExYmY0OTM2ZGRmODhmNDI2NTg5M2ViZGNlOWFkMGRhZDk0MmJmNmU1ZDUxZjk3YTEiLCJ1cmwiOiJodHRwczovL2V4YW1wbGUub3JnL25vdC1hLXJlbGVhc2UuYmluIn0=\",\"signature\":\"MEUCIQCkymYvpFYXXxbffi8/p6RePO2FH4ucmcpJVdHN5+mq0QIgfl5sjWLxklGgjvf6L6pY539XTwLGBnzJ2NbUkOFqJ3A=\"}";

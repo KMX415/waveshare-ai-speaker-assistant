@@ -1,5 +1,7 @@
-param([switch]$Flash, [string]$Port = 'COM14')
+param([switch]$Flash, [switch]$OtaLayout, [switch]$LegacyLayout, [string]$Port = 'COM14')
 $ErrorActionPreference = 'Stop'
+if ($OtaLayout -and $LegacyLayout) { throw 'Choose only one partition layout.' }
+if ($Flash -and !$OtaLayout -and !$LegacyLayout) { throw 'Choose -OtaLayout, or explicitly use -LegacyLayout only for an unmigrated legacy speaker.' }
 $voiceCache = Join-Path $env:USERPROFILE '.cache\home-voice'
 $env:IDF_PATH = Join-Path $voiceCache 'esp-idf'
 $env:IDF_TOOLS_PATH = Join-Path $voiceCache 'idf-tools'
@@ -17,7 +19,9 @@ $env:IDF_PYTHON_ENV_PATH = Split-Path (Split-Path $voicePython)
 $stage = Join-Path $voiceCache 'firmware'
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'CMakeLists.txt'), (Join-Path $PSScriptRoot 'sdkconfig.defaults') -Destination $stage -Force
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'partitions.csv') -Destination $stage -Force
+$partitionSource = if ($OtaLayout) { 'partitions-ota.csv' } else { 'partitions.csv' }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot $partitionSource) -Destination (Join-Path $stage 'partitions.csv') -Force
+if ($OtaLayout) { Add-Content -LiteralPath (Join-Path $stage 'sdkconfig.defaults') -Value 'CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y' }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'main') -Destination $stage -Recurse -Force
 if (Test-Path (Join-Path $PSScriptRoot 'dependencies.lock')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'dependencies.lock') -Destination $stage -Force
@@ -39,6 +43,10 @@ try {
         $configText = $configText -replace '(?m)^CONFIG_ESP_MAIN_TASK_STACK_SIZE=.*$', 'CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192'
         $configText = $configText -replace '(?m)^CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=.*$', 'CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=1024'
         $configText = $configText -replace '(?m)^CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=.*$', 'CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=65536'
+        if ($OtaLayout) {
+            $configText = $configText -replace '(?m)^# CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE is not set', 'CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y'
+            if ($configText -notmatch '(?m)^CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y') { $configText += "`nCONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`n" }
+        }
         Set-Content -LiteralPath 'sdkconfig' -Value $configText -Encoding utf8
     }
     & $voicePython (Join-Path $env:IDF_PATH 'tools\idf.py') build

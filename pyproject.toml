@@ -12,6 +12,9 @@ dependencies = ["websockets>=15,<18", "sounddevice>=0.5.3,<0.6", "pyserial==3.5"
 [project.scripts]
 home-voice = "home_voice.cli:main"
 
+[project.optional-dependencies]
+release-tools = ["cryptography>=45,<51"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

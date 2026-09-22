@@ -1,3 +1,4 @@
+#include "runtime_gate.h"
 #include "activity_leds.h"
 #include "live_voice.h"
 #include "wake_word.h"
@@ -62,7 +63,8 @@ static void worker(void *unused) {
         bool show_error=idle_failed && (uint32_t)(now-error_started)<3000;
         for(unsigned i=0;i<LED_COUNT;i++) {
             uint8_t r=0,g=0,b=0;
-            if(waking) {g=45;}
+            if(runtime_updating()) {if(i==(now/180)%LED_COUNT){r=30;g=12;}}
+            else if(waking) {g=45;}
             else if(envelope>0) {
                 float fill=fminf(1.0f,fmaxf(0,envelope*LED_COUNT-i));
                 g=(uint8_t)(22*fill);b=(uint8_t)(64*fill);r=(uint8_t)(8*fill);

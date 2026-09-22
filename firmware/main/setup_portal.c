@@ -1,3 +1,6 @@
+#include "device_identity.h"
+#include "firmware_update.h"
+#include "runtime_gate.h"
 #include "setup_portal.h"
 #include "board_audio.h"
 #include "credentials.h"
@@ -115,6 +118,7 @@ static esp_err_t json_response(httpd_req_t *r, cJSON *value) {
 }
 static esp_err_t error(httpd_req_t *r, const char *message) {
     httpd_resp_set_status(r, "400 Bad Request");
+    if(r->method==HTTP_POST && runtime_updating())return error(r,"Firmware maintenance in progress; retry shortly");
     cJSON *body = cJSON_CreateObject();
     cJSON_AddStringToObject(body, "error", message);
     return json_response(r, body);
@@ -204,6 +208,7 @@ static esp_err_t handle(httpd_req_t *r) {
         cJSON_AddNumberToObject(body,"volume",volume);
         cJSON_AddNumberToObject(body,"gain",gain);
         cJSON_AddItemToObject(body,"microphone",mic_control_status());
+        cJSON_AddItemToObject(body,"update",firmware_update_status());
         cJSON_AddBoolToObject(body,"key_set",credentials_present());
         cJSON_AddBoolToObject(body,"key_saved",credentials_saved());
         cJSON_AddBoolToObject(body,"secure_storage",credentials_secure_storage());
@@ -214,6 +219,7 @@ static esp_err_t handle(httpd_req_t *r) {
         cJSON_AddItemToObject(body,"wake",wake_word_status());
         cJSON_AddItemToObject(body,"failure",live_voice_failure_status());
         cJSON_AddItemToObject(body,"assistant",assistant_settings());
+        cJSON_AddItemToObject(body,"device",device_identity_status());
         cJSON_AddItemToObject(body,"memories",assistant_memories());
     } else if (!strcmp(r->uri,"/api/scan")) {
         if (esp_wifi_scan_start(NULL,true) != ESP_OK) { cJSON_Delete(body); return error(r,"Scan unavailable while connecting. Try again shortly."); }

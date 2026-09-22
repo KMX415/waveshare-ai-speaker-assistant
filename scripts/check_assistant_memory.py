@@ -70,7 +70,7 @@ try:
         assert diagnostic(1)['auto_memory']
     assert diagnostic(2)['test_present']
     fixture_owned = True
-    send(b'R')
+    send(b'RRESTART')
     board.close()
     time.sleep(8)
     board = open_board('COM14')

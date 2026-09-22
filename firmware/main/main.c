@@ -1,3 +1,6 @@
+#include "device_identity.h"
+#include "firmware_update.h"
+#include "runtime_gate.h"
 // USB packets: 'HV', type (1 command, 2 PCM, 3 status), uint16 LE length, payload.
 // Console logs go to UART0, never into the USB packet stream.
 #include <string.h>
@@ -158,6 +161,8 @@ static void speaker_task(void *unused) {
         activity_leds_audio(frame.samples,AUDIO_SAMPLES);
     }
 }
+static atomic_uint microphone_reads;
+bool audio_healthy(void){return atomic_load(&microphone_reads)>100&&atomic_load(&playback_writes)>100;}
 static void mic_task(void *unused) {
     int16_t raw[AUDIO_SAMPLES*4];
     aec_handle_t *aec = aec_create(16000, 4, 1, AEC_MODE_VOIP_HIGH_PERF);
@@ -171,6 +176,7 @@ static void mic_task(void *unused) {
     int peak1 = 0, peak2 = 0, ref_peak = 0;
     for (;;) {
         ESP_ERROR_CHECK(board_audio_read(raw));
+        atomic_fetch_add(&microphone_reads,1);
         for (int i = 0; i < AUDIO_SAMPLES; ++i) {
             int r = abs(raw[4*i]), a = abs(raw[4*i+1]), b = abs(raw[4*i+3]);
             if (a > peak1) peak1 = a;
@@ -223,11 +229,13 @@ void app_main(void) {
     configASSERT(tx_lock && playback && playback_lock);
     ESP_ERROR_CHECK(board_audio_init());
     credentials_init();
+    device_identity_init();
     live_voice_init();
     setup_portal_init();
     mic_control_init();
     wake_word_init();
     activity_leds_init();
+    firmware_update_init();
     xTaskCreate(speaker_task, "speaker", 6144, NULL, 6, NULL);
     xTaskCreatePinnedToCore(mic_task, "microphone", 16384, NULL, 5, NULL, 1);
     xTaskCreate(button_task,"button",4096,NULL,2,NULL);
@@ -252,7 +260,7 @@ void app_main(void) {
         last_command = esp_timer_get_time();
         if (header[0] == 1 && length >= 1) {
             switch (data[0]) {
-            case 'I': status("{\"type\":\"device\",\"firmware\":\"home-voice-standalone-0.6.1\",\"standalone\":true,\"aec\":true,\"sample_rate\":16000}"); audio_settings();device_state();break;
+            case 'I': status("{\"type\":\"device\",\"firmware\":\"home-voice-standalone-" HOME_VOICE_VERSION "\",\"standalone\":true,\"aec\":true,\"sample_rate\":16000}"); audio_settings();device_state();break;
             case 'L': {
                 char report[120];
                 snprintf(report,sizeof(report),"{\"type\":\"led_status\",\"frames\":%u,\"audio_frames\":%u}",activity_leds_frames(),activity_leds_audio_frames());
@@ -262,6 +270,17 @@ void app_main(void) {
                 char report[64];
                 snprintf(report,sizeof(report),"{\"type\":\"portal_selftest\",\"passed_mask\":%lu}",(unsigned long)setup_portal_selftest());
                 status(report);break;
+            }
+            case 'h': {
+                if(length>1 && length<=33 && !live_voice_active()&&!runtime_updating()) {
+                    char room[33]={0};memcpy(room,data+1,length-1);device_identity_set_room(room);
+                }
+                cJSON *j=device_identity_status();char *s=cJSON_PrintUnformatted(j);if(s){status(s);free(s);}cJSON_Delete(j);break;
+            }
+            case 'u': {
+                if(length==2&&(data[1]==1||data[1]==2))firmware_update_request(data[1]==2);
+                if(length==2&&(data[1]==4||data[1]==5))firmware_update_preview(data[1]==5);
+                cJSON *j=firmware_update_status();if(length==2&&data[1]==3&&!live_voice_active()&&!runtime_updating())cJSON_AddNumberToObject(j,"selftest",firmware_update_selftest());char *s=cJSON_PrintUnformatted(j);if(s){status(s);free(s);}cJSON_Delete(j);break;
             }
             case 'N': device_state();break;
             case 'M': {
@@ -343,7 +362,7 @@ void app_main(void) {
                 if (length == 2 && setup_portal_set_volume(data[1]) == ESP_OK) audio_settings();
                 else status("{\"type\":\"settings_error\",\"message\":\"Volume update failed\"}");
                 break;
-            case 'S': if(!live_voice_active()){pending_bytes = 0; audio_clear(); atomic_store(&streaming, true);} break;
+            case 'S': if(!live_voice_active()&&!runtime_updating()){pending_bytes = 0; audio_clear(); atomic_store(&streaming, true);} break;
             case 'X': pending_bytes = 0; atomic_store(&streaming, false); xQueueReset(playback); break;
             case 'T': atomic_store(&tone_frames, 15); break;
             case 'P': break; // Host heartbeat; USB cable loss stops capture within three seconds.

@@ -1,3 +1,4 @@
+#include "runtime_gate.h"
 #include "live_voice.h"
 #include "credentials.h"
 #include "setup_portal.h"
@@ -425,7 +426,7 @@ cleanup:
     atomic_store(&ready,false);audio_clear();message_used=0;message_opcode=0;
     memset(headers,0,sizeof(headers));memset(key,0,sizeof(key));
     if(!atomic_load(&failed))state=limit_reason?limit_reason:(atomic_load(&finalized)?"Ready; session closed":"Ready; final usage not confirmed");
-    wake_word_resume_after_voice();atomic_store(&busy,false);vTaskDelete(NULL);
+    wake_word_resume_after_voice();atomic_store(&busy,false);runtime_release(RUNTIME_VOICE);vTaskDelete(NULL);
 }
 void live_voice_init(void) {
     static StaticQueue_t input_control;
@@ -443,9 +444,10 @@ esp_err_t live_voice_start(void) {
     if(wake_word_testing())return ESP_ERR_INVALID_STATE;
     if(audio_usb_active())return ESP_ERR_INVALID_STATE;
     if(!credentials_present()){state="Enter your OpenAI API key in device setup";return ESP_ERR_INVALID_STATE;}
-    bool expected=false;if(!atomic_compare_exchange_strong(&busy,&expected,true))return ESP_ERR_INVALID_STATE;
+    if(!runtime_acquire(RUNTIME_VOICE))return ESP_ERR_INVALID_STATE;
+    bool expected=false;if(!atomic_compare_exchange_strong(&busy,&expected,true)){runtime_release(RUNTIME_VOICE);return ESP_ERR_INVALID_STATE;}
     atomic_store(&stopping,false);
-    if(xTaskCreate(session_task,"live_voice",12288,NULL,4,NULL)!=pdPASS){atomic_store(&busy,false);return ESP_ERR_NO_MEM;}
+    if(xTaskCreate(session_task,"live_voice",12288,NULL,4,NULL)!=pdPASS){atomic_store(&busy,false);runtime_release(RUNTIME_VOICE);return ESP_ERR_NO_MEM;}
     return ESP_OK;
 }
 void live_voice_feed(const int16_t *samples,size_t count) {

@@ -21,6 +21,8 @@ A standalone, Wi-Fi voice assistant with local wake words and a ring of light th
 
 </div>
 
+Multiroom development for Kitchen, Living Room, and Bedroom is tracked in the [implementation plan](docs/multiroom-plan.md). Signed Wi-Fi updates and room identity are the first milestones; coordinated wake words and intercom are not in the stable release yet.
+
 ---
 
 ## A little speaker. A real conversation.

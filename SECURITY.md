@@ -50,6 +50,10 @@ provider's policies. The desktop client offers an explicit transcript-printing o
 Live sessions are billable. Hardware voice-check scripts also open billable sessions when
 invoked. Do not run them in CI or against someone else's account.
 
+## Firmware update authentication
+
+The multiroom development branch verifies OTA manifests using a pinned ECDSA P-256 public key and validates the downloaded application's digest before boot selection. This protects the firmware update path; it does not enable hardware secure boot or prevent a physical attacker from replacing firmware over USB. The private release-signing key and local flash backups must remain outside Git and release assets. Do not publish merged flash backups as firmware updates.
+
 ## Reporting a vulnerability
 
 Use the repository's private vulnerability reporting feature if enabled. Do not post

@@ -66,7 +66,7 @@ try:
     send(b'Z'); wait(lambda: not reports['device_state']['active'], 25)
     assert reports['device_state']['finalized']
     print('PASS: model saved alternate voice via tool', flush=True)
-    send(b'R'); board.close(); time.sleep(8)
+    send(b'RRESTART'); board.close(); time.sleep(8)
     board = open_board('COM14'); decoder = Decoder(); reports.clear()
     wait(lambda: 'memory_diagnostics' in reports)
     assert reports['memory_diagnostics']['voice'] == alternate

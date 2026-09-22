@@ -38,11 +38,13 @@ directory and Python under `idf-tools\python_env\idf5.5_py3.12_env`.
 It does not install ESP-IDF. Use the standard build above unless you have that layout.
 
 ```powershell
-.\firmware\build.ps1
-.\firmware\build.ps1 -Flash -Port COM14
+.\firmware\build.ps1 -OtaLayout
+.\firmware\build.ps1 -OtaLayout -Flash -Port COM14
 ```
 
 It copies the source into a path without spaces. Edit this checkout, not the staged copy.
+
+On the multiroom development branch, the helper requires an explicit layout for flashing. `-OtaLayout` performs the one-time USB migration to two application slots while preserving data partition offsets. Use `-LegacyLayout` only for an intentionally unmigrated legacy board. **Never flash the legacy partition table onto a migrated speaker.** For a manual ESP-IDF build, use `idf.py menuconfig` to select `partitions-ota.csv` as the custom partition table and enable `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` before building/flashing. The manual defaults above otherwise retain the legacy layout. Read [Wi-Fi update migration and release signing](../docs/wifi-updates.md) first.
 
 ## Wiring used by this firmware
 

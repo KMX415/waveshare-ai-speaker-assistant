@@ -71,3 +71,9 @@ Protocol reference: [GPT-Live delegation and tools](https://developers.openai.co
 Say "What voices can I choose?" or "Change your voice to Cedar." The assistant saves the choice on the speaker. Say "Goodbye Jarvis," then wake it again to hear the new voice. The current conversation keeps its original voice. The choice survives unplugging. Marin remains the default. The device setup page also has an OpenAI voice selector.
 
 Supported built-in [OpenAI Live voices](https://developers.openai.com/api/reference/typescript/resources/live): Alloy, Ash, Ballad, Beacon, Bossa, Cedar, Cinder, Coral, Delta, Echo, Gleam, Marin, Meridian, Quartz, Ripple, Sage, Shimmer, Stone, Tempo, Verse, Vesper, Willow. Voice choice is separate from the assistant name and wake phrase. Voice controls must be enabled.
+
+## Firmware updates (multiroom development branch)
+
+On a speaker migrated to the OTA layout, say "Check for updates," "What firmware are you running?" or "Install the firmware update." Checks and installation are queued until the conversation ends so they do not compete with audio. Say "Goodbye Jarvis," then ask for update status in a later conversation. Installation restarts the speaker only after a newer signed release has downloaded and passed validation. These commands currently address this speaker only; household-wide rollout is tracked in the [multiroom plan](multiroom-plan.md).
+
+A signed release must first be published. An unavailable release is reported as unavailable, not success. See [Wi-Fi update development and migration](wifi-updates.md). The old downloadable v0.6.1 build does not contain these tools.
